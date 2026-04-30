@@ -1,14 +1,16 @@
 import type { Session } from '@supabase/supabase-js';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../lib/supabase';
 
 type HomeScreenProps = {
+  latestPhotoUri: string | null;
+  onOpenCamera: () => void;
   session: Session;
 };
 
-export function HomeScreen({ session }: HomeScreenProps) {
+export function HomeScreen({ latestPhotoUri, onOpenCamera, session }: HomeScreenProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -27,15 +29,26 @@ export function HomeScreen({ session }: HomeScreenProps) {
         <Text style={styles.eyebrow}>FishApp</Text>
         <Text style={styles.title}>Oturum acik.</Text>
         <Text style={styles.subtitle}>
-          {session.user.email ?? 'Kullanici'} hesabi ile devam ediyorsun. Siradaki adim kamera
-          entegrasyonu.
+          {session.user.email ?? 'Kullanici'} hesabi ile devam ediyorsun. Fis fotografi cekerek
+          analiz akisini baslatabilirsin.
         </Text>
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Gun 2 durumu</Text>
-        <Text style={styles.panelValue}>Auth ve session hazir</Text>
+        <Text style={styles.panelLabel}>Gun 3 durumu</Text>
+        <Text style={styles.panelValue}>Kamera akisi hazir</Text>
       </View>
+
+      {latestPhotoUri ? (
+        <View style={styles.previewPanel}>
+          <Image source={{ uri: latestPhotoUri }} style={styles.previewImage} />
+          <Text style={styles.previewText}>Son cekilen fis fotografi hazir.</Text>
+        </View>
+      ) : null}
+
+      <Pressable onPress={onOpenCamera} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
+        <Text style={styles.primaryButtonText}>Fis fotografi cek</Text>
+      </Pressable>
 
       <Pressable
         disabled={isSigningOut}
@@ -104,7 +117,7 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     minHeight: 52,
-    marginTop: 16,
+    marginTop: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -116,6 +129,38 @@ const styles = StyleSheet.create({
     color: '#21725e',
     fontSize: 16,
     fontWeight: '800',
+  },
+  primaryButton: {
+    minHeight: 52,
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#21725e',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  previewPanel: {
+    marginTop: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#07110d',
+  },
+  previewText: {
+    color: '#52645d',
+    fontSize: 14,
+    lineHeight: 20,
+    padding: 12,
   },
   pressed: {
     opacity: 0.85,

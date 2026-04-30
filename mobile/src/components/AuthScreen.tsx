@@ -14,7 +14,11 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 type AuthMode = 'signIn' | 'signUp';
 
-export function AuthScreen() {
+type AuthScreenProps = {
+  onPreviewCamera: () => void;
+};
+
+export function AuthScreen({ onPreviewCamera }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,6 +77,9 @@ export function AuthScreen() {
             mobile/.env dosyasina EXPO_PUBLIC_SUPABASE_URL ve EXPO_PUBLIC_SUPABASE_ANON_KEY
             eklenince auth aktif olur.
           </Text>
+          <Pressable onPress={onPreviewCamera} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>Kamerayi test et</Text>
+          </Pressable>
         </View>
       ) : (
         <View style={styles.form}>
