@@ -1,0 +1,209 @@
+FISHAPP - 1. HAFTA PROFESYONEL GELİŞTİRME PLANI
+==============================================
+
+HEDEF:
+Fotoğraf → Upload → OCR → Anlamlı veri akışı çalışan bir core sistem oluşturmak.
+
+GENEL AMAÇ:
+Hafta sonunda uçtan uca çalışan demo:
+Kullanıcı fiş çeker → sistem veriyi çıkarır → ekranda gösterir
+
+
+----------------------------------------------
+GÜN 1 — PROJE TEMELİ & MİMARİ
+----------------------------------------------
+Hedef:
+Çalışan proje ve backend bağlantısı
+
+Görevler:
+- GitHub repo oluştur
+- Branch yapısı:
+  - main
+  - dev
+- React Native (Expo) proje başlat
+- Supabase projesi oluştur
+- Supabase Auth aktif et
+
+Database Taslağı:
+receipts:
+- id (uuid)
+- user_id
+- image_url
+- raw_text
+- total_amount
+- date
+- merchant
+- created_at
+
+Çıktı:
+- Uygulama açılıyor
+- Backend bağlantısı hazır
+
+
+----------------------------------------------
+GÜN 2 — AUTH & SESSION
+----------------------------------------------
+Hedef:
+Kullanıcı giriş yapabilsin
+
+Görevler:
+- Signup (email/password)
+- Login ekranı
+- Session persist (otomatik giriş)
+
+UI:
+- Minimal login screen
+
+Çıktı:
+- Kullanıcı kayıt olur ve giriş yapar
+
+
+----------------------------------------------
+GÜN 3 — KAMERA ENTEGRASYONU
+----------------------------------------------
+Hedef:
+Fiş fotoğrafı çekme
+
+Görevler:
+- Kamera izinleri
+- Foto çekme
+- Preview ekranı
+
+UX:
+- Retake butonu
+- Use Photo butonu
+
+Çıktı:
+- Kullanıcı fiş fotoğrafı çekebilir
+
+
+----------------------------------------------
+GÜN 4 — UPLOAD PIPELINE
+----------------------------------------------
+Hedef:
+Fotoğraf backend’e gönderilsin
+
+Görevler:
+- Supabase Storage kur
+- Image upload fonksiyonu yaz
+- Public URL oluştur
+
+Teknik:
+- Image compression ekle
+- Dosya isimlendirme:
+  userId/timestamp.jpg
+
+Çıktı:
+- Fotoğraf cloud’a yüklenir
+- URL alınır
+
+
+----------------------------------------------
+GÜN 5 — OCR ENTEGRASYONU
+----------------------------------------------
+Hedef:
+Görselden metin çıkarma
+
+Görevler:
+- OCR API entegrasyonu (Google Vision önerilir)
+- Backend function yaz
+- Image → text dönüşümü
+
+Beklenen çıktı örneği:
+"ŞOK MARKET
+TOPLAM 128.75 TL
+TARİH: 12.04.2026"
+
+Çıktı:
+- OCR çalışır ve text döner
+
+
+----------------------------------------------
+GÜN 6 — PARSING ENGINE (KRİTİK)
+----------------------------------------------
+Hedef:
+Metni anlamlı veriye çevirme
+
+Görevler:
+- Regex yaz:
+  Toplam:
+    (\d+[.,]\d{2})\s?TL
+
+  Tarih:
+    \d{2}[./-]\d{2}[./-]\d{4}
+
+- Merchant extraction:
+  - İlk satırdan çek
+
+Beklenen çıktı:
+{
+  merchant: "ŞOK MARKET",
+  total: 128.75,
+  date: "2026-04-12"
+}
+
+Çıktı:
+- Structured veri elde edilir
+
+
+----------------------------------------------
+GÜN 7 — END-TO-END FLOW
+----------------------------------------------
+Hedef:
+Tüm sistemin birlikte çalışması
+
+Flow:
+1. Kullanıcı giriş yapar
+2. Fotoğraf çeker
+3. Upload edilir
+4. OCR çalışır
+5. Veri parse edilir
+6. DB’ye kaydedilir
+
+UI:
+- Processing ekranı
+- Sonuç ekranı:
+  - Merchant
+  - Tutar
+  - Tarih
+
+Test:
+- Kötü foto testleri
+- Eksik veri testleri
+- Log sistemi
+
+Çıktı:
+- Uçtan uca çalışan sistem
+
+
+----------------------------------------------
+HAFTA SONU DURUMU
+----------------------------------------------
+Başarı kriterleri:
+
+- Kullanıcı fiş fotoğrafı çekebilir
+- Sistem OCR ile metin çıkarır
+- Veriler parse edilir
+- Sonuç ekranda gösterilir
+- DB’ye kayıt yapılır
+
+Bu noktada ürün:
+“Çalışan demo + MVP core engine” seviyesine ulaşır
+
+
+----------------------------------------------
+ÖNEMLİ NOTLAR
+----------------------------------------------
+
+YAPILMAMASI GEREKENLER:
+- UI/animasyon kasmak
+- Gereksiz feature eklemek
+- Kategori sistemi eklemek (2. hafta işi)
+
+ODAK:
+- Stabilite
+- Doğruluk
+- Hız
+
+MVP TANIMI:
+“Fişi çek → veri çıkar → göster”

@@ -1,0 +1,206 @@
+FISHAPP - PROJE ÖZET DOKÜMANI
+==============================================
+
+PROJE ADI:
+FishApp
+
+PROJE TANIMI:
+FishApp, kullanıcıların fiş ve faturalarını fotoğraf çekerek dijital ortama aktarmasını,
+otomatik olarak analiz edilmesini ve harcamalarını takip etmesini sağlayan
+yapay zeka destekli bir mobil uygulamadır.
+
+Kullanıcılar fişlerini manuel girmek zorunda kalmaz.
+Sistem otomatik olarak:
+- Metni okur (OCR)
+- Veriyi çıkarır
+- Kategorize eder
+- Harcama analizi sunar
+
+
+----------------------------------------------
+PROJENİN AMACI
+----------------------------------------------
+
+- Fiş/fatura takibini kolaylaştırmak
+- Harcama alışkanlıklarını görünür hale getirmek
+- Zaman kaybını ortadan kaldırmak
+- Bireysel ve küçük işletmeler için pratik çözüm sunmak
+
+Ana değer önerisi:
+“Fişini çek, gerisini sistem halletsin.”
+
+
+----------------------------------------------
+HEDEF KİTLE
+----------------------------------------------
+
+1. Bireysel kullanıcılar:
+- Harcamalarını takip etmek isteyenler
+- Bütçe kontrolü yapmak isteyenler
+
+2. Küçük işletmeler (KOBİ):
+- Fiş/fatura düzenlemek isteyenler
+- Muhasebe sürecini kolaylaştırmak isteyenler
+
+3. Freelance çalışanlar:
+- Gider takibi yapanlar
+- Vergi hazırlığı yapanlar
+
+
+----------------------------------------------
+TEMEL ÖZELLİKLER (MVP)
+----------------------------------------------
+
+- Fiş fotoğrafı çekme
+- OCR ile metin çıkarma
+- Otomatik veri parsing
+- Kategori atama (rule-based + AI)
+- Harcama listesi
+- Toplam harcama hesaplama
+- Dashboard (kategori bazlı analiz)
+- CSV / Excel export
+- Kullanıcı giriş sistemi
+
+
+----------------------------------------------
+KULLANICI AKIŞI
+----------------------------------------------
+
+1. Kullanıcı uygulamaya giriş yapar
+2. Fiş fotoğrafı çeker
+3. Sistem:
+   - Fotoğrafı yükler
+   - OCR ile metni okur
+   - Veriyi parse eder
+   - Kategori atar
+4. Kullanıcı sonucu görür
+5. Harcamalarını dashboard üzerinden takip eder
+
+
+----------------------------------------------
+KULLANILAN TEKNOLOJİLER
+----------------------------------------------
+
+Frontend:
+- React Native (Expo)
+
+Backend:
+- Supabase (Database + Auth + Storage)
+
+OCR:
+- Google Cloud Vision API
+
+AI:
+- OpenAI API (kategori çıkarma ve analiz)
+
+Database:
+- PostgreSQL (Supabase üzerinden)
+
+Storage:
+- Supabase Storage
+
+
+----------------------------------------------
+SİSTEM MİMARİSİ
+----------------------------------------------
+
+Mobile App (Client)
+    ↓
+Backend (Supabase / API Layer)
+    ↓
+Storage (Image upload)
+    ↓
+OCR Service (Google Vision)
+    ↓
+Parsing Engine (Regex + AI)
+    ↓
+Database (Structured Data)
+
+Temel prensip:
+Basit, modüler ve ölçeklenebilir yapı
+
+
+----------------------------------------------
+VERİ AKIŞI
+----------------------------------------------
+
+1. Image Capture
+2. Upload to Storage
+3. OCR Processing
+4. Text Parsing
+5. Data Structuring
+6. Database Save
+7. UI Display
+
+
+----------------------------------------------
+MONETIZATION MODELİ
+----------------------------------------------
+
+Freemium Model:
+
+Free Plan:
+- Günlük sınırlı fiş (örn: 5 adet)
+
+Pro Plan:
+- Sınırsız fiş
+- Export özelliği
+- Gelişmiş analiz
+
+Fiyat:
+- 49–99 TL / ay (önerilen)
+
+
+----------------------------------------------
+REKABET AVANTAJI
+----------------------------------------------
+
+- Otomatik veri çıkarma (manuel giriş yok)
+- AI destekli kategori
+- Basit ve hızlı kullanım
+- Türkiye odaklı kullanım senaryosu
+
+Rakiplere göre fark:
+- Daha sade UX
+- Daha hızlı onboarding
+- AI entegrasyonu
+
+
+----------------------------------------------
+GELECEK GELİŞTİRMELER
+----------------------------------------------
+
+- AI harcama analizi:
+  “Bu ay yemek harcaman arttı”
+
+- Banka entegrasyonu
+- PDF fatura desteği
+- Çoklu dil desteği
+- B2B panel (işletmeler için)
+
+
+----------------------------------------------
+PROJE DURUMU
+----------------------------------------------
+
+- MVP: Hazır (3 hafta içinde geliştirilebilir)
+- Satılabilir: Evet
+- Genişletilebilir: Evet
+- Startup potansiyeli: Yüksek
+
+
+----------------------------------------------
+ÖZET
+----------------------------------------------
+
+FishApp, fiş ve harcama takibini otomatik hale getiren,
+AI destekli, mobil odaklı bir SaaS ürünüdür.
+
+Kullanıcıya sunduğu en büyük değer:
+Zaman kazancı + finansal farkındalık
+
+Proje:
+- Teknik olarak uygulanabilir
+- Ticari olarak mantıklı
+- CV açısından güçlü
+- Startup’a dönüşebilir

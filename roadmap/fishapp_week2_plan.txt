@@ -1,0 +1,192 @@
+FISHAPP - 2. HAFTA PROFESYONEL GELİŞTİRME PLANI
+==============================================
+
+HEDEF:
+Ham veriyi anlamlı ürüne dönüştürmek:
+- Fişler listelenecek
+- Kategorize edilecek
+- Harcama analizi yapılacak
+
+GENEL AMAÇ:
+Kullanıcı artık uygulamadan değer görmeye başlasın
+
+
+----------------------------------------------
+GÜN 8 — VERİ MODELİ GELİŞTİRME
+----------------------------------------------
+Hedef:
+Database’i ürün seviyesine taşımak
+
+Görevler:
+- receipts tablosunu güncelle:
+  - id
+  - user_id
+  - image_url
+  - raw_text
+  - total_amount
+  - date
+  - merchant
+  - category
+  - confidence
+  - created_at
+
+- (Opsiyonel) categories tablosu oluştur:
+  - id
+  - name
+  - icon
+
+- Backend insert fonksiyonunu güncelle
+
+Çıktı:
+- Ölçeklenebilir veri yapısı
+
+
+----------------------------------------------
+GÜN 9 — RULE-BASED KATEGORİ
+----------------------------------------------
+Hedef:
+Basit kategori sistemi kurmak
+
+Görevler:
+- Merchant mapping oluştur:
+  MIGROS → Market
+  ŞOK → Market
+  A101 → Market
+  STARBUCKS → Food
+  UBER → Transport
+
+- Merchant uppercase normalize et
+- Match → kategori
+- Yoksa → Other
+
+Çıktı:
+- %60-70 doğrulukta kategori sistemi
+
+
+----------------------------------------------
+GÜN 10 — AI KATEGORİ (UPGRADE)
+----------------------------------------------
+Hedef:
+Kategori doğruluğunu artırmak
+
+Görevler:
+- AI API entegrasyonu
+- Prompt tasarımı:
+  Merchant + context → kategori
+
+- Flow:
+  önce rule-based
+  sonra AI fallback
+
+Çıktı:
+- %85+ doğruluk
+
+
+----------------------------------------------
+GÜN 11 — RECEIPT LIST UI
+----------------------------------------------
+Hedef:
+Veriyi kullanıcıya göstermek
+
+Görevler:
+- Liste ekranı oluştur:
+  - merchant
+  - amount
+  - category
+  - date
+
+- UI iyileştirme:
+  - iconlar
+  - renkler
+
+Çıktı:
+- Kullanıcı verisini görür
+
+
+----------------------------------------------
+GÜN 12 — HARCAMA HESAPLAMA
+----------------------------------------------
+Hedef:
+Değer üretmek
+
+Görevler:
+- Günlük toplam
+- Haftalık toplam
+- Kategori bazlı toplam
+
+- Backend aggregation fonksiyonları
+
+Çıktı:
+- Harcama analizi hazır
+
+
+----------------------------------------------
+GÜN 13 — DASHBOARD
+----------------------------------------------
+Hedef:
+Görselleştirme eklemek
+
+Görevler:
+- Pie chart (kategori dağılımı)
+- Toplam harcama widget
+
+Çıktı:
+- Dashboard ekranı
+
+
+----------------------------------------------
+GÜN 14 — DÜZENLEME & EDGE CASE
+----------------------------------------------
+Hedef:
+Gerçek kullanıcıya hazırlık
+
+Görevler:
+
+- Manuel edit:
+  - kategori değiştir
+  - tutar düzelt
+
+- Edge case:
+  - OCR hatası
+  - eksik veri
+
+- Validation ekle
+
+- Boş veri engelle
+
+Çıktı:
+- Stabil uygulama
+
+
+----------------------------------------------
+HAFTA SONU DURUMU
+----------------------------------------------
+
+Başarı kriterleri:
+
+- Fişler listelenir
+- Kategorize edilir
+- Harcamalar hesaplanır
+- Dashboard çalışır
+- Kullanıcı veri üzerinde kontrol sahibidir
+
+Bu noktada ürün:
+“Çalışan harcama takip uygulaması” seviyesine ulaşır
+
+
+----------------------------------------------
+ÖNEMLİ NOTLAR
+----------------------------------------------
+
+YAPILMAMASI GEREKENLER:
+- Çok fazla kategori eklemek
+- Gereksiz AI kullanımı
+- Karmaşık analytics
+
+ODAK:
+- Basitlik
+- Doğruluk
+- Kullanıcı deneyimi
+
+MVP TANIMI:
+“Fişi çek → kategorize et → harcamayı göster”
