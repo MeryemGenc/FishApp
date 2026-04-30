@@ -3,14 +3,25 @@ import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../lib/supabase';
+import type { ReceiptUploadResult } from '../services/receiptUpload';
 
 type HomeScreenProps = {
+  isUploading: boolean;
   latestPhotoUri: string | null;
+  latestUpload: ReceiptUploadResult | null;
   onOpenCamera: () => void;
   session: Session;
+  uploadError: string;
 };
 
-export function HomeScreen({ latestPhotoUri, onOpenCamera, session }: HomeScreenProps) {
+export function HomeScreen({
+  isUploading,
+  latestPhotoUri,
+  latestUpload,
+  onOpenCamera,
+  session,
+  uploadError,
+}: HomeScreenProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -35,14 +46,20 @@ export function HomeScreen({ latestPhotoUri, onOpenCamera, session }: HomeScreen
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Gun 3 durumu</Text>
-        <Text style={styles.panelValue}>Kamera akisi hazir</Text>
+        <Text style={styles.panelLabel}>Gun 4 durumu</Text>
+        <Text style={styles.panelValue}>Upload pipeline hazir</Text>
       </View>
 
       {latestPhotoUri ? (
         <View style={styles.previewPanel}>
           <Image source={{ uri: latestPhotoUri }} style={styles.previewImage} />
-          <Text style={styles.previewText}>Son cekilen fis fotografi hazir.</Text>
+          <Text style={styles.previewText}>
+            {isUploading ? 'Fotograf Supabase Storage alanina yukleniyor.' : 'Son cekilen fis fotografi hazir.'}
+          </Text>
+          {latestUpload ? (
+            <Text style={styles.uploadText}>Storage path: {latestUpload.path}</Text>
+          ) : null}
+          {uploadError ? <Text style={styles.errorText}>{uploadError}</Text> : null}
         </View>
       ) : null}
 
@@ -161,6 +178,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     padding: 12,
+  },
+  uploadText: {
+    color: '#21725e',
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  errorText: {
+    color: '#a33f00',
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   pressed: {
     opacity: 0.85,

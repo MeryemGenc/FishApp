@@ -6,11 +6,15 @@ import { AuthScreen } from './src/components/AuthScreen';
 import { CameraScreen } from './src/components/CameraScreen';
 import { HomeScreen } from './src/components/HomeScreen';
 import { useAuthSession } from './src/hooks/useAuthSession';
+import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
 export default function App() {
   const { session, isLoading } = useAuthSession();
   const [activeScreen, setActiveScreen] = useState<'home' | 'camera'>('home');
   const [latestPhotoUri, setLatestPhotoUri] = useState<string | null>(null);
+  const [latestUpload, setLatestUpload] = useState<ReceiptUploadResult | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   if (isLoading) {
     return (
@@ -26,18 +30,40 @@ export default function App() {
       {activeScreen === 'camera' ? (
         <CameraScreen
           onClose={() => setActiveScreen('home')}
-          onUsePhoto={(photoUri) => {
+          onUsePhoto={async (photoUri) => {
             setLatestPhotoUri(photoUri);
             setActiveScreen('home');
+
+            if (!session) {
+              setLatestUpload(null);
+              setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
+              return;
+            }
+
+            setIsUploading(true);
+            setUploadError('');
+
+            try {
+              const upload = await uploadReceiptImage(photoUri, session.user.id);
+              setLatestUpload(upload);
+            } catch (error) {
+              setLatestUpload(null);
+              setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
+            } finally {
+              setIsUploading(false);
+            }
           }}
         />
       ) : null}
 
       {session && activeScreen === 'home' ? (
         <HomeScreen
+          isUploading={isUploading}
           latestPhotoUri={latestPhotoUri}
+          latestUpload={latestUpload}
           onOpenCamera={() => setActiveScreen('camera')}
           session={session}
+          uploadError={uploadError}
         />
       ) : null}
 

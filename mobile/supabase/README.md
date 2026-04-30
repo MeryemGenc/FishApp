@@ -1,6 +1,7 @@
 # Supabase Setup
 
 Day 1 needs a Supabase project with Auth enabled and the first database table.
+Day 4 also needs a Storage bucket for receipt photos.
 
 1. Create a new Supabase project.
 2. Enable Email/Password under Authentication > Providers.
@@ -9,3 +10,4 @@ Day 1 needs a Supabase project with Auth enabled and the first database table.
 5. Fill `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
 
 The mobile app already has a Supabase client at `src/lib/supabase.ts`.
+Receipt photos upload to the `receipt-images` bucket using `userId/timestamp.jpg` paths.
