@@ -8,6 +8,7 @@ import { HomeScreen } from './src/components/HomeScreen';
 import { useAuthSession } from './src/hooks/useAuthSession';
 import { parseReceipt, type ParsedReceipt } from './src/services/receiptParser';
 import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
+import { saveReceipt, type SavedReceipt } from './src/services/receiptRepository';
 import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
 export default function App() {
@@ -17,10 +18,13 @@ export default function App() {
   const [latestUpload, setLatestUpload] = useState<ReceiptUploadResult | null>(null);
   const [latestOcr, setLatestOcr] = useState<ReceiptOcrResult | null>(null);
   const [parsedReceipt, setParsedReceipt] = useState<ParsedReceipt | null>(null);
+  const [savedReceipt, setSavedReceipt] = useState<SavedReceipt | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [ocrError, setOcrError] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [isSavingReceipt, setIsSavingReceipt] = useState(false);
 
   if (isLoading) {
     return (
@@ -42,8 +46,10 @@ export default function App() {
             setLatestUpload(null);
             setLatestOcr(null);
             setParsedReceipt(null);
+            setSavedReceipt(null);
             setUploadError('');
             setOcrError('');
+            setSaveError('');
 
             if (!session) {
               setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
@@ -71,8 +77,28 @@ export default function App() {
                 imageUri: photoUri,
                 imageUrl: upload?.publicUrl,
               });
+              const parsed = parseReceipt(ocr.rawText);
               setLatestOcr(ocr);
-              setParsedReceipt(parseReceipt(ocr.rawText));
+              setParsedReceipt(parsed);
+
+              if (session) {
+                setIsSavingReceipt(true);
+
+                try {
+                  const saved = await saveReceipt({
+                    userId: session.user.id,
+                    imageUrl: upload?.publicUrl ?? null,
+                    parsedReceipt: parsed,
+                  });
+                  setSavedReceipt(saved);
+                } catch (error) {
+                  setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
+                } finally {
+                  setIsSavingReceipt(false);
+                }
+              } else {
+                setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
+              }
             } catch (error) {
               setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
             } finally {
@@ -85,6 +111,7 @@ export default function App() {
       {(session || latestPhotoUri) && activeScreen === 'home' ? (
         <HomeScreen
           isOcrProcessing={isOcrProcessing}
+          isSavingReceipt={isSavingReceipt}
           isUploading={isUploading}
           latestOcr={latestOcr}
           latestPhotoUri={latestPhotoUri}
@@ -92,6 +119,8 @@ export default function App() {
           ocrError={ocrError}
           onOpenCamera={() => setActiveScreen('camera')}
           parsedReceipt={parsedReceipt}
+          savedReceipt={savedReceipt}
+          saveError={saveError}
           session={session}
           uploadError={uploadError}
         />

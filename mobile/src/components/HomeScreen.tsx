@@ -5,10 +5,12 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { supabase } from '../lib/supabase';
 import type { ReceiptOcrResult } from '../services/receiptOcr';
 import type { ParsedReceipt } from '../services/receiptParser';
+import type { SavedReceipt } from '../services/receiptRepository';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
 
 type HomeScreenProps = {
   isOcrProcessing: boolean;
+  isSavingReceipt: boolean;
   isUploading: boolean;
   latestOcr: ReceiptOcrResult | null;
   latestPhotoUri: string | null;
@@ -16,12 +18,15 @@ type HomeScreenProps = {
   ocrError: string;
   onOpenCamera: () => void;
   parsedReceipt: ParsedReceipt | null;
+  savedReceipt: SavedReceipt | null;
+  saveError: string;
   session: Session | null;
   uploadError: string;
 };
 
 export function HomeScreen({
   isOcrProcessing,
+  isSavingReceipt,
   isUploading,
   latestOcr,
   latestPhotoUri,
@@ -29,6 +34,8 @@ export function HomeScreen({
   ocrError,
   onOpenCamera,
   parsedReceipt,
+  savedReceipt,
+  saveError,
   session,
   uploadError,
 }: HomeScreenProps) {
@@ -57,8 +64,8 @@ export function HomeScreen({
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Gun 6 durumu</Text>
-        <Text style={styles.panelValue}>Parsing engine hazir</Text>
+        <Text style={styles.panelLabel}>Gun 7 durumu</Text>
+        <Text style={styles.panelValue}>End-to-end akis hazir</Text>
       </View>
 
       {latestPhotoUri ? (
@@ -110,6 +117,25 @@ export function HomeScreen({
             <Text style={styles.parsedLabel}>Tarih</Text>
             <Text style={styles.parsedValue}>{parsedReceipt.date ?? 'Bulunamadi'}</Text>
           </View>
+        </View>
+      ) : null}
+
+      {parsedReceipt ? (
+        <View style={styles.savePanel}>
+          <Text style={styles.ocrTitle}>Kayit durumu</Text>
+          {isSavingReceipt ? (
+            <View style={styles.processingRow}>
+              <ActivityIndicator color="#21725e" />
+              <Text style={styles.processingText}>Fis veritabanina kaydediliyor.</Text>
+            </View>
+          ) : null}
+          {savedReceipt ? (
+            <>
+              <Text style={styles.successText}>Fis DB kaydi olusturuldu.</Text>
+              <Text style={styles.uploadText}>Receipt ID: {savedReceipt.id}</Text>
+            </>
+          ) : null}
+          {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
         </View>
       ) : null}
 
@@ -299,6 +325,20 @@ const styles = StyleSheet.create({
   parsedValue: {
     color: '#12231d',
     fontSize: 17,
+    fontWeight: '800',
+  },
+  savePanel: {
+    marginTop: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    gap: 10,
+  },
+  successText: {
+    color: '#21725e',
+    fontSize: 14,
     fontWeight: '800',
   },
   pressed: {
