@@ -1,80 +1,144 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-import { isSupabaseConfigured } from './src/lib/supabase';
+import { useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+import { AuthScreen } from './src/components/AuthScreen';
+import { CameraScreen } from './src/components/CameraScreen';
+import { HomeScreen } from './src/components/HomeScreen';
+import { useAuthSession } from './src/hooks/useAuthSession';
+import { parseReceipt, type ParsedReceipt } from './src/services/receiptParser';
+import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
+import { saveReceipt, type SavedReceipt } from './src/services/receiptRepository';
+import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
 export default function App() {
+  const { session, isLoading } = useAuthSession();
+  const [activeScreen, setActiveScreen] = useState<'home' | 'camera'>('home');
+  const [latestPhotoUri, setLatestPhotoUri] = useState<string | null>(null);
+  const [latestUpload, setLatestUpload] = useState<ReceiptUploadResult | null>(null);
+  const [latestOcr, setLatestOcr] = useState<ReceiptOcrResult | null>(null);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceipt | null>(null);
+  const [savedReceipt, setSavedReceipt] = useState<SavedReceipt | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [ocrError, setOcrError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [isSavingReceipt, setIsSavingReceipt] = useState(false);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color="#21725e" size="large" />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>FishApp MVP</Text>
-        <Text style={styles.title}>Fislerini akilli harcama kayitlarina donustur.</Text>
-        <Text style={styles.subtitle}>
-          Gun 1 temeli hazir: Expo uygulamasi aciliyor, Supabase client iskeleti kuruldu.
-        </Text>
-      </View>
+    <>
+      {activeScreen === 'camera' ? (
+        <CameraScreen
+          onClose={() => setActiveScreen('home')}
+          onUsePhoto={async (photoUri) => {
+            setLatestPhotoUri(photoUri);
+            setActiveScreen('home');
+            setLatestUpload(null);
+            setLatestOcr(null);
+            setParsedReceipt(null);
+            setSavedReceipt(null);
+            setUploadError('');
+            setOcrError('');
+            setSaveError('');
 
-      <View style={styles.statusPanel}>
-        <Text style={styles.statusLabel}>Backend baglantisi</Text>
-        <Text style={[styles.statusValue, isSupabaseConfigured ? styles.ready : styles.pending]}>
-          {isSupabaseConfigured ? 'Hazir' : 'Env bekliyor'}
-        </Text>
-      </View>
+            if (!session) {
+              setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
+            }
 
+            let upload: ReceiptUploadResult | null = null;
+
+            if (session) {
+              setIsUploading(true);
+
+              try {
+                upload = await uploadReceiptImage(photoUri, session.user.id);
+                setLatestUpload(upload);
+              } catch (error) {
+                setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
+              } finally {
+                setIsUploading(false);
+              }
+            }
+
+            setIsOcrProcessing(true);
+
+            try {
+              const ocr = await extractReceiptText({
+                imageUri: photoUri,
+                imageUrl: upload?.publicUrl,
+              });
+              const parsed = parseReceipt(ocr.rawText);
+              setLatestOcr(ocr);
+              setParsedReceipt(parsed);
+
+              if (session) {
+                setIsSavingReceipt(true);
+
+                try {
+                  const saved = await saveReceipt({
+                    userId: session.user.id,
+                    imageUrl: upload?.publicUrl ?? null,
+                    parsedReceipt: parsed,
+                  });
+                  setSavedReceipt(saved);
+                } catch (error) {
+                  setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
+                } finally {
+                  setIsSavingReceipt(false);
+                }
+              } else {
+                setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
+              }
+            } catch (error) {
+              setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
+            } finally {
+              setIsOcrProcessing(false);
+            }
+          }}
+        />
+      ) : null}
+
+      {(session || latestPhotoUri) && activeScreen === 'home' ? (
+        <HomeScreen
+          isOcrProcessing={isOcrProcessing}
+          isSavingReceipt={isSavingReceipt}
+          isUploading={isUploading}
+          latestOcr={latestOcr}
+          latestPhotoUri={latestPhotoUri}
+          latestUpload={latestUpload}
+          ocrError={ocrError}
+          onOpenCamera={() => setActiveScreen('camera')}
+          parsedReceipt={parsedReceipt}
+          savedReceipt={savedReceipt}
+          saveError={saveError}
+          session={session}
+          uploadError={uploadError}
+        />
+      ) : null}
+
+      {!session && !latestPhotoUri && activeScreen === 'home' ? (
+        <AuthScreen onPreviewCamera={() => setActiveScreen('camera')} />
+      ) : null}
       <StatusBar style="auto" />
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
     backgroundColor: '#f7faf8',
-    padding: 24,
+    alignItems: 'center',
     justifyContent: 'center',
-  },
-  header: {
-    gap: 12,
-  },
-  eyebrow: {
-    color: '#21725e',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#12231d',
-    fontSize: 32,
-    fontWeight: '800',
-    lineHeight: 38,
-  },
-  subtitle: {
-    color: '#52645d',
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  statusPanel: {
-    width: '100%',
-    marginTop: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d8e3dd',
-    backgroundColor: '#ffffff',
-    padding: 16,
-  },
-  statusLabel: {
-    color: '#52645d',
-    fontSize: 14,
-  },
-  statusValue: {
-    marginTop: 6,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  ready: {
-    color: '#21725e',
-  },
-  pending: {
-    color: '#a35f00',
   },
 });
