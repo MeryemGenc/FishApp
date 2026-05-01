@@ -6,6 +6,7 @@ import { AuthScreen } from './src/components/AuthScreen';
 import { CameraScreen } from './src/components/CameraScreen';
 import { HomeScreen } from './src/components/HomeScreen';
 import { useAuthSession } from './src/hooks/useAuthSession';
+import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
 import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
 export default function App() {
@@ -13,8 +14,11 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState<'home' | 'camera'>('home');
   const [latestPhotoUri, setLatestPhotoUri] = useState<string | null>(null);
   const [latestUpload, setLatestUpload] = useState<ReceiptUploadResult | null>(null);
+  const [latestOcr, setLatestOcr] = useState<ReceiptOcrResult | null>(null);
   const [uploadError, setUploadError] = useState('');
+  const [ocrError, setOcrError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
 
   if (isLoading) {
     return (
@@ -33,24 +37,42 @@ export default function App() {
           onUsePhoto={async (photoUri) => {
             setLatestPhotoUri(photoUri);
             setActiveScreen('home');
+            setLatestUpload(null);
+            setLatestOcr(null);
+            setUploadError('');
+            setOcrError('');
 
             if (!session) {
-              setLatestUpload(null);
               setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
-              return;
             }
 
-            setIsUploading(true);
-            setUploadError('');
+            let upload: ReceiptUploadResult | null = null;
+
+            if (session) {
+              setIsUploading(true);
+
+              try {
+                upload = await uploadReceiptImage(photoUri, session.user.id);
+                setLatestUpload(upload);
+              } catch (error) {
+                setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
+              } finally {
+                setIsUploading(false);
+              }
+            }
+
+            setIsOcrProcessing(true);
 
             try {
-              const upload = await uploadReceiptImage(photoUri, session.user.id);
-              setLatestUpload(upload);
+              const ocr = await extractReceiptText({
+                imageUri: photoUri,
+                imageUrl: upload?.publicUrl,
+              });
+              setLatestOcr(ocr);
             } catch (error) {
-              setLatestUpload(null);
-              setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
+              setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
             } finally {
-              setIsUploading(false);
+              setIsOcrProcessing(false);
             }
           }}
         />
@@ -58,9 +80,12 @@ export default function App() {
 
       {session && activeScreen === 'home' ? (
         <HomeScreen
+          isOcrProcessing={isOcrProcessing}
           isUploading={isUploading}
+          latestOcr={latestOcr}
           latestPhotoUri={latestPhotoUri}
           latestUpload={latestUpload}
+          ocrError={ocrError}
           onOpenCamera={() => setActiveScreen('camera')}
           session={session}
           uploadError={uploadError}

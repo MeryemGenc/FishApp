@@ -1,23 +1,30 @@
 import type { Session } from '@supabase/supabase-js';
 import { useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../lib/supabase';
+import type { ReceiptOcrResult } from '../services/receiptOcr';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
 
 type HomeScreenProps = {
+  isOcrProcessing: boolean;
   isUploading: boolean;
+  latestOcr: ReceiptOcrResult | null;
   latestPhotoUri: string | null;
   latestUpload: ReceiptUploadResult | null;
+  ocrError: string;
   onOpenCamera: () => void;
   session: Session;
   uploadError: string;
 };
 
 export function HomeScreen({
+  isOcrProcessing,
   isUploading,
+  latestOcr,
   latestPhotoUri,
   latestUpload,
+  ocrError,
   onOpenCamera,
   session,
   uploadError,
@@ -35,7 +42,7 @@ export function HomeScreen({
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>FishApp</Text>
         <Text style={styles.title}>Oturum acik.</Text>
@@ -46,8 +53,8 @@ export function HomeScreen({
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Gun 4 durumu</Text>
-        <Text style={styles.panelValue}>Upload pipeline hazir</Text>
+        <Text style={styles.panelLabel}>Gun 5 durumu</Text>
+        <Text style={styles.panelValue}>OCR akisi hazir</Text>
       </View>
 
       {latestPhotoUri ? (
@@ -60,6 +67,25 @@ export function HomeScreen({
             <Text style={styles.uploadText}>Storage path: {latestUpload.path}</Text>
           ) : null}
           {uploadError ? <Text style={styles.errorText}>{uploadError}</Text> : null}
+        </View>
+      ) : null}
+
+      {latestPhotoUri ? (
+        <View style={styles.ocrPanel}>
+          <Text style={styles.ocrTitle}>OCR sonucu</Text>
+          {isOcrProcessing ? (
+            <View style={styles.processingRow}>
+              <ActivityIndicator color="#21725e" />
+              <Text style={styles.processingText}>Fis metni okunuyor.</Text>
+            </View>
+          ) : null}
+          {latestOcr ? (
+            <>
+              <Text style={styles.ocrProvider}>Provider: {latestOcr.provider}</Text>
+              <Text style={styles.ocrText}>{latestOcr.rawText}</Text>
+            </>
+          ) : null}
+          {ocrError ? <Text style={styles.errorText}>{ocrError}</Text> : null}
         </View>
       ) : null}
 
@@ -82,13 +108,13 @@ export function HomeScreen({
           <Text style={styles.signOutButtonText}>Cikis yap</Text>
         )}
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
     backgroundColor: '#f7faf8',
@@ -192,6 +218,40 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     paddingHorizontal: 12,
     paddingBottom: 12,
+  },
+  ocrPanel: {
+    marginTop: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    gap: 10,
+  },
+  ocrTitle: {
+    color: '#12231d',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  processingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  processingText: {
+    color: '#52645d',
+    fontSize: 14,
+  },
+  ocrProvider: {
+    color: '#21725e',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ocrText: {
+    color: '#12231d',
+    fontFamily: 'monospace',
+    fontSize: 13,
+    lineHeight: 20,
   },
   pressed: {
     opacity: 0.85,
