@@ -4,6 +4,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 
 import { supabase } from '../lib/supabase';
 import type { ReceiptOcrResult } from '../services/receiptOcr';
+import type { ParsedReceipt } from '../services/receiptParser';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
 
 type HomeScreenProps = {
@@ -14,7 +15,8 @@ type HomeScreenProps = {
   latestUpload: ReceiptUploadResult | null;
   ocrError: string;
   onOpenCamera: () => void;
-  session: Session;
+  parsedReceipt: ParsedReceipt | null;
+  session: Session | null;
   uploadError: string;
 };
 
@@ -26,6 +28,7 @@ export function HomeScreen({
   latestUpload,
   ocrError,
   onOpenCamera,
+  parsedReceipt,
   session,
   uploadError,
 }: HomeScreenProps) {
@@ -45,16 +48,17 @@ export function HomeScreen({
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>FishApp</Text>
-        <Text style={styles.title}>Oturum acik.</Text>
+        <Text style={styles.title}>{session ? 'Oturum acik.' : 'Demo sonucu.'}</Text>
         <Text style={styles.subtitle}>
-          {session.user.email ?? 'Kullanici'} hesabi ile devam ediyorsun. Fis fotografi cekerek
-          analiz akisini baslatabilirsin.
+          {session
+            ? `${session.user.email ?? 'Kullanici'} hesabi ile devam ediyorsun. Fis fotografi cekerek analiz akisini baslatabilirsin.`
+            : 'Demo modunda kamera, OCR ve parsing akisini test ediyorsun.'}
         </Text>
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Gun 5 durumu</Text>
-        <Text style={styles.panelValue}>OCR akisi hazir</Text>
+        <Text style={styles.panelLabel}>Gun 6 durumu</Text>
+        <Text style={styles.panelValue}>Parsing engine hazir</Text>
       </View>
 
       {latestPhotoUri ? (
@@ -89,25 +93,47 @@ export function HomeScreen({
         </View>
       ) : null}
 
+      {parsedReceipt ? (
+        <View style={styles.parsedPanel}>
+          <Text style={styles.ocrTitle}>Cikarilan bilgiler</Text>
+          <View style={styles.parsedRow}>
+            <Text style={styles.parsedLabel}>Magaza</Text>
+            <Text style={styles.parsedValue}>{parsedReceipt.merchant ?? 'Bulunamadi'}</Text>
+          </View>
+          <View style={styles.parsedRow}>
+            <Text style={styles.parsedLabel}>Tutar</Text>
+            <Text style={styles.parsedValue}>
+              {parsedReceipt.totalAmount === null ? 'Bulunamadi' : `${parsedReceipt.totalAmount.toFixed(2)} TL`}
+            </Text>
+          </View>
+          <View style={styles.parsedRow}>
+            <Text style={styles.parsedLabel}>Tarih</Text>
+            <Text style={styles.parsedValue}>{parsedReceipt.date ?? 'Bulunamadi'}</Text>
+          </View>
+        </View>
+      ) : null}
+
       <Pressable onPress={onOpenCamera} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
         <Text style={styles.primaryButtonText}>Fis fotografi cek</Text>
       </Pressable>
 
-      <Pressable
-        disabled={isSigningOut}
-        onPress={handleSignOut}
-        style={({ pressed }) => [
-          styles.signOutButton,
-          pressed && styles.pressed,
-          isSigningOut && styles.disabled,
-        ]}
-      >
-        {isSigningOut ? (
-          <ActivityIndicator color="#21725e" />
-        ) : (
-          <Text style={styles.signOutButtonText}>Cikis yap</Text>
-        )}
-      </Pressable>
+      {session ? (
+        <Pressable
+          disabled={isSigningOut}
+          onPress={handleSignOut}
+          style={({ pressed }) => [
+            styles.signOutButton,
+            pressed && styles.pressed,
+            isSigningOut && styles.disabled,
+          ]}
+        >
+          {isSigningOut ? (
+            <ActivityIndicator color="#21725e" />
+          ) : (
+            <Text style={styles.signOutButtonText}>Cikis yap</Text>
+          )}
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -252,6 +278,28 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 13,
     lineHeight: 20,
+  },
+  parsedPanel: {
+    marginTop: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    gap: 12,
+  },
+  parsedRow: {
+    gap: 4,
+  },
+  parsedLabel: {
+    color: '#52645d',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  parsedValue: {
+    color: '#12231d',
+    fontSize: 17,
+    fontWeight: '800',
   },
   pressed: {
     opacity: 0.85,

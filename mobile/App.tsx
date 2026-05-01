@@ -6,6 +6,7 @@ import { AuthScreen } from './src/components/AuthScreen';
 import { CameraScreen } from './src/components/CameraScreen';
 import { HomeScreen } from './src/components/HomeScreen';
 import { useAuthSession } from './src/hooks/useAuthSession';
+import { parseReceipt, type ParsedReceipt } from './src/services/receiptParser';
 import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
 import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
@@ -15,6 +16,7 @@ export default function App() {
   const [latestPhotoUri, setLatestPhotoUri] = useState<string | null>(null);
   const [latestUpload, setLatestUpload] = useState<ReceiptUploadResult | null>(null);
   const [latestOcr, setLatestOcr] = useState<ReceiptOcrResult | null>(null);
+  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceipt | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [ocrError, setOcrError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -39,6 +41,7 @@ export default function App() {
             setActiveScreen('home');
             setLatestUpload(null);
             setLatestOcr(null);
+            setParsedReceipt(null);
             setUploadError('');
             setOcrError('');
 
@@ -69,6 +72,7 @@ export default function App() {
                 imageUrl: upload?.publicUrl,
               });
               setLatestOcr(ocr);
+              setParsedReceipt(parseReceipt(ocr.rawText));
             } catch (error) {
               setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
             } finally {
@@ -78,7 +82,7 @@ export default function App() {
         />
       ) : null}
 
-      {session && activeScreen === 'home' ? (
+      {(session || latestPhotoUri) && activeScreen === 'home' ? (
         <HomeScreen
           isOcrProcessing={isOcrProcessing}
           isUploading={isUploading}
@@ -87,12 +91,13 @@ export default function App() {
           latestUpload={latestUpload}
           ocrError={ocrError}
           onOpenCamera={() => setActiveScreen('camera')}
+          parsedReceipt={parsedReceipt}
           session={session}
           uploadError={uploadError}
         />
       ) : null}
 
-      {!session && activeScreen === 'home' ? (
+      {!session && !latestPhotoUri && activeScreen === 'home' ? (
         <AuthScreen onPreviewCamera={() => setActiveScreen('camera')} />
       ) : null}
       <StatusBar style="auto" />
