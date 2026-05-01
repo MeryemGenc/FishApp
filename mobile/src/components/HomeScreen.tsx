@@ -132,7 +132,12 @@ export function HomeScreen({
           {savedReceipt ? (
             <>
               <Text style={styles.successText}>Fis DB kaydi olusturuldu.</Text>
-              <Text style={styles.uploadText}>Receipt ID: {savedReceipt.id}</Text>
+              <View style={styles.idBox}>
+                <Text style={styles.parsedLabel}>Receipt ID</Text>
+                <Text selectable style={styles.idText}>
+                  {savedReceipt.id}
+                </Text>
+              </View>
             </>
           ) : null}
           {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
@@ -340,6 +345,18 @@ const styles = StyleSheet.create({
     color: '#21725e',
     fontSize: 14,
     fontWeight: '800',
+  },
+  idBox: {
+    borderRadius: 8,
+    backgroundColor: '#f7faf8',
+    padding: 10,
+    gap: 4,
+  },
+  idText: {
+    color: '#12231d',
+    fontFamily: 'monospace',
+    fontSize: 12,
+    lineHeight: 18,
   },
   pressed: {
     opacity: 0.85,

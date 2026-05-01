@@ -16,7 +16,7 @@ type SaveReceiptInput = {
   parsedReceipt: ParsedReceipt;
 };
 
-export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveReceiptInput) {
+export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveReceiptInput): Promise<SavedReceipt> {
   if (!supabase) {
     throw new Error('Supabase env bilgileri eklenmeden DB kaydi calismaz.');
   }
@@ -36,6 +36,10 @@ export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveRecei
 
   if (error) {
     throw error;
+  }
+
+  if (!data?.id) {
+    throw new Error('Fis kaydedildi ancak Supabase kayit ID degeri donmedi.');
   }
 
   return data;
