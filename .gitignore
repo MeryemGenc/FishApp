@@ -1,5 +1,7 @@
 node_modules/
 .expo/
+supabase/.temp/
+mobile/supabase/.temp/
 dist/
 web-build/
 roadmap/
