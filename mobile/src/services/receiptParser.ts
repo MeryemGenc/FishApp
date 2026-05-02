@@ -2,6 +2,8 @@ export type ParsedReceipt = {
   merchant: string | null;
   totalAmount: number | null;
   date: string | null;
+  category: string | null;
+  confidence: number | null;
   rawText: string;
 };
 
@@ -45,6 +47,8 @@ export function parseReceipt(rawText: string): ParsedReceipt {
     merchant: parseMerchant(rawText),
     totalAmount: parseTotalAmount(rawText),
     date: parseDate(rawText),
+    category: null,
+    confidence: null,
     rawText,
   };
 }

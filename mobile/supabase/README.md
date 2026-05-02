@@ -5,6 +5,7 @@ Day 4 also needs a Storage bucket for receipt photos.
 Day 5 uses a mock OCR service until Google Cloud Vision credentials are added.
 Day 6 parses OCR text into merchant, total amount, and receipt date.
 Day 7 saves processed receipts into the `receipts` table.
+Day 8 adds receipt category/confidence fields and a shared `categories` table.
 
 1. Create a new Supabase project.
 2. Enable Email/Password under Authentication > Providers.
@@ -19,3 +20,4 @@ with Google Cloud Vision without changing the UI flow.
 Parsing is isolated in `src/services/receiptParser.ts` and currently uses simple rules
 for MVP receipt formats.
 Database persistence is isolated in `src/services/receiptRepository.ts`.
+Run `supabase/schema.sql` again after Day 8 to add the new scalable data model fields.

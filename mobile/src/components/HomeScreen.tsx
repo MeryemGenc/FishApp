@@ -117,6 +117,16 @@ export function HomeScreen({
             <Text style={styles.parsedLabel}>Tarih</Text>
             <Text style={styles.parsedValue}>{parsedReceipt.date ?? 'Bulunamadi'}</Text>
           </View>
+          <View style={styles.parsedRow}>
+            <Text style={styles.parsedLabel}>Kategori</Text>
+            <Text style={styles.parsedValue}>{parsedReceipt.category ?? 'Henuz atanmadi'}</Text>
+          </View>
+          <View style={styles.parsedRow}>
+            <Text style={styles.parsedLabel}>Guven skoru</Text>
+            <Text style={styles.parsedValue}>
+              {parsedReceipt.confidence === null ? 'Henuz yok' : `%${Math.round(parsedReceipt.confidence * 100)}`}
+            </Text>
+          </View>
         </View>
       ) : null}
 

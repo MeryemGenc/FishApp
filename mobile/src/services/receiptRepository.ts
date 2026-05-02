@@ -7,6 +7,8 @@ export type SavedReceipt = {
   merchant: string | null;
   total_amount: number | null;
   date: string | null;
+  category: string | null;
+  confidence: number | null;
   created_at: string;
 };
 
@@ -30,8 +32,10 @@ export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveRecei
       total_amount: parsedReceipt.totalAmount,
       date: parsedReceipt.date,
       merchant: parsedReceipt.merchant,
+      category: parsedReceipt.category,
+      confidence: parsedReceipt.confidence,
     })
-    .select('id, image_url, merchant, total_amount, date, created_at')
+    .select('id, image_url, merchant, total_amount, date, category, confidence, created_at')
     .single<SavedReceipt>();
 
   if (error) {

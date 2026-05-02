@@ -6,5 +6,7 @@ export type Receipt = {
   total_amount: number | null;
   date: string | null;
   merchant: string | null;
+  category: string | null;
+  confidence: number | null;
   created_at: string;
 };
