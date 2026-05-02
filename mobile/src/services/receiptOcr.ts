@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 export type ReceiptOcrResult = {
   rawText: string;
   provider: 'mock' | 'edge-mock' | 'google-vision';
+  reason?: string;
 };
 
 type ReceiptOcrInput = {
@@ -41,6 +42,7 @@ async function extractReceiptTextWithEdgeFunction(imageUrl: string) {
   return {
     rawText: data.rawText,
     provider: data.provider,
+    reason: data.reason,
   };
 }
 

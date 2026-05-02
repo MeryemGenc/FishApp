@@ -93,6 +93,7 @@ export function HomeScreen({
           {latestOcr ? (
             <>
               <Text style={styles.ocrProvider}>Provider: {latestOcr.provider}</Text>
+              {latestOcr.reason ? <Text style={styles.ocrReason}>Reason: {latestOcr.reason}</Text> : null}
               <Text style={styles.ocrText}>{latestOcr.rawText}</Text>
             </>
           ) : null}
@@ -313,6 +314,11 @@ const styles = StyleSheet.create({
     color: '#21725e',
     fontSize: 13,
     fontWeight: '700',
+  },
+  ocrReason: {
+    color: '#a35f00',
+    fontSize: 13,
+    lineHeight: 19,
   },
   ocrText: {
     color: '#12231d',

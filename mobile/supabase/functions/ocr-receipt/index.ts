@@ -104,12 +104,20 @@ Deno.serve(async (request) => {
       });
     }
 
-    const rawText = await extractTextWithGoogleVision(imageUrl, googleVisionApiKey);
+    try {
+      const rawText = await extractTextWithGoogleVision(imageUrl, googleVisionApiKey);
 
-    return jsonResponse({
-      rawText,
-      provider: 'google-vision',
-    });
+      return jsonResponse({
+        rawText,
+        provider: 'google-vision',
+      });
+    } catch (error) {
+      return jsonResponse({
+        rawText: MOCK_RECEIPT_TEXT,
+        provider: 'edge-mock',
+        reason: error instanceof Error ? error.message : 'Google Vision OCR failed.',
+      });
+    }
   } catch (error) {
     return jsonResponse(
       {

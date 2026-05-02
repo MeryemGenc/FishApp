@@ -69,28 +69,28 @@ export function CameraScreen({ onClose, onUsePhoto }: CameraScreenProps) {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} facing="back" style={styles.camera}>
-        <View style={styles.topBar}>
-          <Pressable onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>Kapat</Text>
-          </Pressable>
-        </View>
+      <CameraView ref={cameraRef} facing="back" style={styles.camera} />
 
-        <View style={styles.captureArea}>
-          <View style={styles.receiptFrame} />
-          <Pressable
-            disabled={isCapturing}
-            onPress={handleTakePhoto}
-            style={({ pressed }) => [
-              styles.captureButton,
-              pressed && styles.pressed,
-              isCapturing && styles.disabled,
-            ]}
-          >
-            <View style={styles.captureButtonInner} />
-          </Pressable>
-        </View>
-      </CameraView>
+      <View style={styles.topBar}>
+        <Pressable onPress={onClose} style={styles.closeButton}>
+          <Text style={styles.closeButtonText}>Kapat</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.captureArea}>
+        <View style={styles.receiptFrame} />
+        <Pressable
+          disabled={isCapturing}
+          onPress={handleTakePhoto}
+          style={({ pressed }) => [
+            styles.captureButton,
+            pressed && styles.pressed,
+            isCapturing && styles.disabled,
+          ]}
+        >
+          <View style={styles.captureButtonInner} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -120,9 +120,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   topBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
     paddingHorizontal: 20,
     paddingTop: 48,
     alignItems: 'flex-start',
@@ -140,6 +144,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   captureArea: {
+    ...StyleSheet.absoluteFillObject,
     flex: 1,
     justifyContent: 'flex-end',
     alignItems: 'center',
