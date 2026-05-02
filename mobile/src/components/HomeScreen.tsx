@@ -17,6 +17,7 @@ type HomeScreenProps = {
   latestUpload: ReceiptUploadResult | null;
   ocrError: string;
   onOpenCamera: () => void;
+  onReturnToAuth: () => void;
   parsedReceipt: ParsedReceipt | null;
   savedReceipt: SavedReceipt | null;
   saveError: string;
@@ -33,6 +34,7 @@ export function HomeScreen({
   latestUpload,
   ocrError,
   onOpenCamera,
+  onReturnToAuth,
   parsedReceipt,
   savedReceipt,
   saveError,
@@ -175,7 +177,11 @@ export function HomeScreen({
             <Text style={styles.signOutButtonText}>Cikis yap</Text>
           )}
         </Pressable>
-      ) : null}
+      ) : (
+        <Pressable onPress={onReturnToAuth} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}>
+          <Text style={styles.signOutButtonText}>Giris ekranina don</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }

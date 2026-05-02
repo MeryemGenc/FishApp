@@ -26,6 +26,21 @@ export default function App() {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
 
+  function resetReceiptFlow() {
+    setActiveScreen('home');
+    setLatestPhotoUri(null);
+    setLatestUpload(null);
+    setLatestOcr(null);
+    setParsedReceipt(null);
+    setSavedReceipt(null);
+    setUploadError('');
+    setOcrError('');
+    setSaveError('');
+    setIsUploading(false);
+    setIsOcrProcessing(false);
+    setIsSavingReceipt(false);
+  }
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -118,6 +133,7 @@ export default function App() {
           latestUpload={latestUpload}
           ocrError={ocrError}
           onOpenCamera={() => setActiveScreen('camera')}
+          onReturnToAuth={resetReceiptFlow}
           parsedReceipt={parsedReceipt}
           savedReceipt={savedReceipt}
           saveError={saveError}

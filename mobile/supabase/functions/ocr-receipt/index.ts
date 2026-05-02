@@ -15,6 +15,9 @@ type OcrRequest = {
 };
 
 type GoogleVisionResponse = {
+  error?: {
+    message?: string;
+  };
   responses?: Array<{
     fullTextAnnotation?: {
       text?: string;
@@ -62,7 +65,8 @@ async function extractTextWithGoogleVision(imageUrl: string, apiKey: string) {
   const data = (await response.json()) as GoogleVisionResponse;
 
   if (!response.ok) {
-    throw new Error(`Google Vision request failed with status ${response.status}.`);
+    const message = data.error?.message ?? `Google Vision request failed with status ${response.status}.`;
+    throw new Error(message);
   }
 
   const visionError = data.responses?.[0]?.error?.message;
