@@ -29,6 +29,12 @@
         {
           "cameraPermission": "FishApp needs camera access to scan receipt photos."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FishApp needs photo library access to select receipt photos."
+        }
       ]
     ],
     "web": {

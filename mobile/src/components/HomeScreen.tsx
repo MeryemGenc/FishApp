@@ -18,6 +18,7 @@ type HomeScreenProps = {
   latestUpload: ReceiptUploadResult | null;
   ocrError: string;
   onOpenCamera: () => void;
+  onPickPhoto: () => void;
   onReturnToAuth: () => void;
   parsedReceipt: ParsedReceipt | null;
   savedReceipt: SavedReceipt | null;
@@ -35,6 +36,7 @@ export function HomeScreen({
   latestUpload,
   ocrError,
   onOpenCamera,
+  onPickPhoto,
   onReturnToAuth,
   parsedReceipt,
   savedReceipt,
@@ -175,6 +177,10 @@ export function HomeScreen({
         <Text style={styles.primaryButtonText}>Fis fotografi cek</Text>
       </Pressable>
 
+      <Pressable onPress={onPickPhoto} style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed]}>
+        <Text style={styles.galleryButtonText}>Galeriden sec</Text>
+      </Pressable>
+
       {session ? (
         <Pressable
           disabled={isSigningOut}
@@ -271,6 +277,21 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  galleryButton: {
+    minHeight: 52,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#21725e',
+    backgroundColor: '#ffffff',
+  },
+  galleryButtonText: {
+    color: '#21725e',
     fontSize: 16,
     fontWeight: '800',
   },

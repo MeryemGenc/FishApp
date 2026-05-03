@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -42,6 +43,90 @@ export default function App() {
     setIsSavingReceipt(false);
   }
 
+  async function processReceiptPhoto(photoUri: string) {
+    setLatestPhotoUri(photoUri);
+    setActiveScreen('home');
+    setLatestUpload(null);
+    setLatestOcr(null);
+    setParsedReceipt(null);
+    setSavedReceipt(null);
+    setUploadError('');
+    setOcrError('');
+    setSaveError('');
+
+    if (!session) {
+      setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
+    }
+
+    let upload: ReceiptUploadResult | null = null;
+
+    if (session) {
+      setIsUploading(true);
+
+      try {
+        upload = await uploadReceiptImage(photoUri, session.user.id);
+        setLatestUpload(upload);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    setIsOcrProcessing(true);
+
+    try {
+      const ocr = await extractReceiptText({
+        imageUri: photoUri,
+        imageUrl: upload?.publicUrl,
+      });
+      const parsed = categorizeReceipt(parseReceipt(ocr.rawText));
+      setLatestOcr(ocr);
+      setParsedReceipt(parsed);
+
+      if (session) {
+        setIsSavingReceipt(true);
+
+        try {
+          const saved = await saveReceipt({
+            userId: session.user.id,
+            imageUrl: upload?.publicUrl ?? null,
+            parsedReceipt: parsed,
+          });
+          setSavedReceipt(saved);
+        } catch (error) {
+          setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
+        } finally {
+          setIsSavingReceipt(false);
+        }
+      } else {
+        setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
+      }
+    } catch (error) {
+      setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
+    } finally {
+      setIsOcrProcessing(false);
+    }
+  }
+
+  async function handlePickPhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadError('Galeri izni olmadan fotograf secemiyorum.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: false,
+      mediaTypes: ['images'],
+      quality: 0.9,
+    });
+
+    if (!result.canceled && result.assets[0]?.uri) {
+      await processReceiptPhoto(result.assets[0].uri);
+    }
+  }
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -56,71 +141,7 @@ export default function App() {
       {activeScreen === 'camera' ? (
         <CameraScreen
           onClose={() => setActiveScreen('home')}
-          onUsePhoto={async (photoUri) => {
-            setLatestPhotoUri(photoUri);
-            setActiveScreen('home');
-            setLatestUpload(null);
-            setLatestOcr(null);
-            setParsedReceipt(null);
-            setSavedReceipt(null);
-            setUploadError('');
-            setOcrError('');
-            setSaveError('');
-
-            if (!session) {
-              setUploadError('Upload icin once Supabase auth ile giris yapmak gerekiyor.');
-            }
-
-            let upload: ReceiptUploadResult | null = null;
-
-            if (session) {
-              setIsUploading(true);
-
-              try {
-                upload = await uploadReceiptImage(photoUri, session.user.id);
-                setLatestUpload(upload);
-              } catch (error) {
-                setUploadError(error instanceof Error ? error.message : 'Fotograf yuklenemedi.');
-              } finally {
-                setIsUploading(false);
-              }
-            }
-
-            setIsOcrProcessing(true);
-
-            try {
-              const ocr = await extractReceiptText({
-                imageUri: photoUri,
-                imageUrl: upload?.publicUrl,
-              });
-              const parsed = categorizeReceipt(parseReceipt(ocr.rawText));
-              setLatestOcr(ocr);
-              setParsedReceipt(parsed);
-
-              if (session) {
-                setIsSavingReceipt(true);
-
-                try {
-                  const saved = await saveReceipt({
-                    userId: session.user.id,
-                    imageUrl: upload?.publicUrl ?? null,
-                    parsedReceipt: parsed,
-                  });
-                  setSavedReceipt(saved);
-                } catch (error) {
-                  setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
-                } finally {
-                  setIsSavingReceipt(false);
-                }
-              } else {
-                setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
-              }
-            } catch (error) {
-              setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
-            } finally {
-              setIsOcrProcessing(false);
-            }
-          }}
+          onUsePhoto={processReceiptPhoto}
         />
       ) : null}
 
@@ -134,6 +155,7 @@ export default function App() {
           latestUpload={latestUpload}
           ocrError={ocrError}
           onOpenCamera={() => setActiveScreen('camera')}
+          onPickPhoto={handlePickPhoto}
           onReturnToAuth={resetReceiptFlow}
           parsedReceipt={parsedReceipt}
           savedReceipt={savedReceipt}

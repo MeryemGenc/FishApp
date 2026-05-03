@@ -1,6 +1,10 @@
-import { CameraView, useCameraPermissions, type CameraCapturedPicture } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+
+type ReceiptPhoto = {
+  uri: string;
+};
 
 type CameraScreenProps = {
   onClose: () => void;
@@ -10,7 +14,7 @@ type CameraScreenProps = {
 export function CameraScreen({ onClose, onUsePhoto }: CameraScreenProps) {
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
+  const [photo, setPhoto] = useState<ReceiptPhoto | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
 
   async function handleTakePhoto() {
@@ -19,12 +23,20 @@ export function CameraScreen({ onClose, onUsePhoto }: CameraScreenProps) {
     }
 
     setIsCapturing(true);
-    const nextPhoto = await cameraRef.current.takePictureAsync({
-      quality: 0.85,
-      skipProcessing: false,
-    });
-    setPhoto(nextPhoto);
-    setIsCapturing(false);
+
+    try {
+      const nextPhoto = await cameraRef.current.takePictureAsync({
+        quality: 0.85,
+        shutterSound: false,
+        skipProcessing: false,
+      });
+
+      if (nextPhoto) {
+        setPhoto({ uri: nextPhoto.uri });
+      }
+    } finally {
+      setIsCapturing(false);
+    }
   }
 
   if (!permission) {
@@ -79,17 +91,22 @@ export function CameraScreen({ onClose, onUsePhoto }: CameraScreenProps) {
 
       <View style={styles.captureArea}>
         <View style={styles.receiptFrame} />
-        <Pressable
-          disabled={isCapturing}
-          onPress={handleTakePhoto}
-          style={({ pressed }) => [
-            styles.captureButton,
-            pressed && styles.pressed,
-            isCapturing && styles.disabled,
-          ]}
-        >
-          <View style={styles.captureButtonInner} />
-        </Pressable>
+      </View>
+
+      <View style={styles.bottomControls}>
+        <View style={styles.captureControls}>
+          <Pressable
+            disabled={isCapturing}
+            onPress={handleTakePhoto}
+            style={({ pressed }) => [
+              styles.captureButton,
+              pressed && styles.pressed,
+              isCapturing && styles.disabled,
+            ]}
+          >
+            <View style={styles.captureButtonInner} />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -127,6 +144,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
+    zIndex: 20,
+    elevation: 20,
     paddingHorizontal: 20,
     paddingTop: 48,
     alignItems: 'flex-start',
@@ -149,12 +168,31 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 174,
+    zIndex: 5,
+    elevation: 5,
+  },
+  captureControls: {
+    alignItems: 'center',
+    gap: 14,
+  },
+  bottomControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    elevation: 30,
+    alignItems: 'center',
+    backgroundColor: 'rgba(7, 17, 13, 0.82)',
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 26,
   },
   receiptFrame: {
     position: 'absolute',
     top: 116,
-    bottom: 148,
+    bottom: 204,
     width: '86%',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.82)',
