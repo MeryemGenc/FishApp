@@ -7,6 +7,7 @@ Day 6 parses OCR text into merchant, total amount, and receipt date.
 Day 7 saves processed receipts into the `receipts` table.
 Day 8 adds receipt category/confidence fields and a shared `categories` table.
 Day 8 also adds an `ocr-receipt` Edge Function for Google Vision OCR.
+Day 9 assigns receipt categories with a rule-based categorizer.
 
 1. Create a new Supabase project.
 2. Enable Email/Password under Authentication > Providers.
@@ -22,6 +23,7 @@ The mobile OCR service first tries the `ocr-receipt` Edge Function when an uploa
 is available, then falls back to local mock OCR if the function is unavailable.
 Parsing is isolated in `src/services/receiptParser.ts` and currently uses simple rules
 for MVP receipt formats.
+Categorization is isolated in `src/services/receiptCategorizer.ts`.
 Database persistence is isolated in `src/services/receiptRepository.ts`.
 Run `supabase/schema.sql` again after Day 8 to add the new scalable data model fields.
 
