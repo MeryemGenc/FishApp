@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import type { Session } from '@supabase/supabase-js';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -42,6 +43,7 @@ export function HomeScreen({
   uploadError,
 }: HomeScreenProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
 
   async function handleSignOut() {
     if (!supabase) {
@@ -51,6 +53,11 @@ export function HomeScreen({
     setIsSigningOut(true);
     await supabase.auth.signOut();
     setIsSigningOut(false);
+  }
+
+  async function handleCopyOcrText(rawText: string) {
+    await Clipboard.setStringAsync(rawText);
+    setCopyMessage('OCR metni kopyalandi.');
   }
 
   return (
@@ -96,6 +103,13 @@ export function HomeScreen({
             <>
               <Text style={styles.ocrProvider}>Provider: {latestOcr.provider}</Text>
               {latestOcr.reason ? <Text style={styles.ocrReason}>Reason: {latestOcr.reason}</Text> : null}
+              <Pressable
+                onPress={() => handleCopyOcrText(latestOcr.rawText)}
+                style={({ pressed }) => [styles.copyButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.copyButtonText}>OCR metnini kopyala</Text>
+              </Pressable>
+              {copyMessage ? <Text style={styles.copyMessage}>{copyMessage}</Text> : null}
               <Text style={styles.ocrText}>{latestOcr.rawText}</Text>
             </>
           ) : null}
@@ -325,6 +339,26 @@ const styles = StyleSheet.create({
     color: '#a35f00',
     fontSize: 13,
     lineHeight: 19,
+  },
+  copyButton: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#21725e',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+  },
+  copyButtonText: {
+    color: '#21725e',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  copyMessage: {
+    color: '#21725e',
+    fontSize: 13,
+    fontWeight: '700',
   },
   ocrText: {
     color: '#12231d',
