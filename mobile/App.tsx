@@ -7,7 +7,8 @@ import { AuthScreen } from './src/components/AuthScreen';
 import { CameraScreen } from './src/components/CameraScreen';
 import { HomeScreen } from './src/components/HomeScreen';
 import { useAuthSession } from './src/hooks/useAuthSession';
-import { categorizeReceipt } from './src/services/receiptCategorizer';
+import { categorizeReceiptWithAiFallback } from './src/services/receiptAiCategorizer';
+import { categorizeReceiptWithRules } from './src/services/receiptCategorizer';
 import { parseReceipt, type ParsedReceipt } from './src/services/receiptParser';
 import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
 import { saveReceipt, type SavedReceipt } from './src/services/receiptRepository';
@@ -80,7 +81,10 @@ export default function App() {
         imageUri: photoUri,
         imageUrl: upload?.publicUrl,
       });
-      const parsed = categorizeReceipt(parseReceipt(ocr.rawText));
+      const ruleCategory = categorizeReceiptWithRules(parseReceipt(ocr.rawText));
+      const parsed = ruleCategory.matched
+        ? ruleCategory.receipt
+        : await categorizeReceiptWithAiFallback(ruleCategory.receipt);
       setLatestOcr(ocr);
       setParsedReceipt(parsed);
 

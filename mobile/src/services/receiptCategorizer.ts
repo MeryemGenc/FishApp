@@ -1,32 +1,10 @@
+import { KNOWN_MERCHANTS, MARKET_CONTEXT_KEYWORDS } from './receiptMerchants';
 import type { ParsedReceipt } from './receiptParser';
 
-type CategoryRule = {
-  keywords: string[];
-  category: string;
+type RuleCategoryResult = {
+  receipt: ParsedReceipt;
+  matched: boolean;
 };
-
-const CATEGORY_RULES: CategoryRule[] = [
-  {
-    keywords: ['MIGROS', 'MIGROS TICARET'],
-    category: 'Market',
-  },
-  {
-    keywords: ['SOK', 'SOK MARKET'],
-    category: 'Market',
-  },
-  {
-    keywords: ['A101', 'A 101'],
-    category: 'Market',
-  },
-  {
-    keywords: ['STARBUCKS'],
-    category: 'Food',
-  },
-  {
-    keywords: ['UBER'],
-    category: 'Transport',
-  },
-];
 
 function normalizeText(value: string) {
   return value
@@ -35,24 +13,55 @@ function normalizeText(value: string) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-export function categorizeReceipt(receipt: ParsedReceipt): ParsedReceipt {
-  const normalizedMerchant = normalizeText(receipt.merchant ?? '');
+function includesKeyword(value: string, keyword: string) {
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(`(^|[^A-Z0-9])${escapedKeyword}([^A-Z0-9]|$)`).test(value);
+}
 
-  const match = CATEGORY_RULES.find((rule) =>
-    rule.keywords.some((keyword) => normalizedMerchant.includes(normalizeText(keyword))),
+export function categorizeReceiptWithRules(receipt: ParsedReceipt): RuleCategoryResult {
+  const normalizedMerchant = normalizeText(receipt.merchant ?? '');
+  const normalizedRawText = normalizeText(receipt.rawText);
+
+  const match = KNOWN_MERCHANTS.find((rule) =>
+    rule.keywords.some((keyword) => includesKeyword(normalizedMerchant, normalizeText(keyword))),
   );
 
-  if (!match) {
+  if (match) {
     return {
-      ...receipt,
-      category: 'Other',
-      confidence: 0.4,
+      receipt: {
+        ...receipt,
+        category: match.category,
+        confidence: 0.9,
+      },
+      matched: true,
+    };
+  }
+
+  const hasMarketContext = MARKET_CONTEXT_KEYWORDS.some((keyword) =>
+    includesKeyword(`${normalizedMerchant}\n${normalizedRawText}`, normalizeText(keyword)),
+  );
+
+  if (hasMarketContext) {
+    return {
+      receipt: {
+        ...receipt,
+        category: 'Market',
+        confidence: 0.65,
+      },
+      matched: true,
     };
   }
 
   return {
-    ...receipt,
-    category: match.category,
-    confidence: 0.9,
+    receipt: {
+      ...receipt,
+      category: 'Other',
+      confidence: 0.4,
+    },
+    matched: false,
   };
+}
+
+export function categorizeReceipt(receipt: ParsedReceipt): ParsedReceipt {
+  return categorizeReceiptWithRules(receipt).receipt;
 }

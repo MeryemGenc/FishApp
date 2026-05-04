@@ -1,0 +1,57 @@
+OCR metni:
+6
+e-Ativ l'atura
+Mgz Adı: Turgut Özal Blv. / Mgz Kodu:7624
+A101 YENI MAGAZACILIK A.Ş.
+2. nolu Erdoğdu Mah. Turgut ÖZAL Blv, No
+ÜSKÜDAR/9480423762
+Tarih: 30/04/2026 Saat: 18:28
+Belge No: 76240013004612940654
+ETTN:9434b5d0-f0f0-4eeb-8b30-16573bb617cb
+EKICI 800 G BEYAZ %1.0
+*255.00
+AVOKADO
+%1.0
+*29.50
+BİRŞAH 1500 G YOĞURT%1.0
+*96.50
+TORKU 1L LAKTZSZ SÜT 1.0
+*59.50
+BİRŞAH 1 L YAĞ SÜT %1.0
+*49.50
+YUMURTA 30LU M
+%1.0
+*119.00
+ARA TOPLAM
+*609.00
+MAL/HIZMET TOPLAM TUTARI
+* 602.97
+TOPKDV
+6.03
+ÖDENECEK TUTAR
+* 609.00
+KREDI KARTI
+*609.00
+Ziraatbank Peşin (1)
+Provizyon No: 265242
+Puan:0.00
+ZIRAAT BANKASI
+I:812262 T:PS108357 534981******0425
+30.04.2026 18:29 B:2828 S:27
+Rrn/Ref. No:612018845981 Ref. No:
+KDV Orani KDV Dahil Tutar
+%1.00
+*609.00
+KDV
+*6.03
+KASIYER ISIMmm : ***** ***** *****
+76240013004612940654
+FaturaAdres https://fatura.a101.com.tr
+sluju navermey 18183
+
+App'in çıkardığı:
+Mağaza: A101
+Tutar:Bulunamadi
+Tarih: 2026-04-30
+Kategori: Market
+Güven Skoru: %90
