@@ -1,16 +1,22 @@
 import type { Session } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../lib/supabase';
 import type { ReceiptOcrResult } from '../services/receiptOcr';
 import type { ParsedReceipt } from '../services/receiptParser';
-import type { ReceiptListItem, SavedReceipt } from '../services/receiptRepository';
+import type {
+  MonthlySpendingSummary,
+  ReceiptListItem,
+  SavedReceipt,
+  YearlySpendingSummary,
+} from '../services/receiptRepository';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
 
 type TabKey = 'entry' | 'receipts' | 'analysis' | 'account';
 type ThemeColorKey = 'green' | 'blue' | 'rose' | 'amber';
+type AnalysisCategoryKey = 'All' | string;
 
 type ThemeColor = {
   key: ThemeColorKey;
@@ -20,6 +26,8 @@ type ThemeColor = {
 };
 
 type HomeScreenProps = {
+  analysisError: string;
+  isLoadingAnalysis: boolean;
   isLoadingReceipts: boolean;
   isOcrProcessing: boolean;
   isSavingReceipt: boolean;
@@ -27,18 +35,25 @@ type HomeScreenProps = {
   latestOcr: ReceiptOcrResult | null;
   latestPhotoUri: string | null;
   latestUpload: ReceiptUploadResult | null;
+  monthlySummary: MonthlySpendingSummary | null;
   ocrError: string;
   onOpenCamera: () => void;
   onPickPhoto: () => void;
+  onRefreshAnalysis: () => void;
   onRefreshReceipts: () => void;
   onReturnToAuth: () => void;
+  onSelectAnalysisMonth: (month: number) => void;
+  onSelectAnalysisYear: (year: number) => void;
   parsedReceipt: ParsedReceipt | null;
   receipts: ReceiptListItem[];
   receiptsError: string;
   savedReceipt: SavedReceipt | null;
   saveError: string;
+  selectedAnalysisMonth: number;
+  selectedAnalysisYear: number;
   session: Session | null;
   uploadError: string;
+  yearlySummary: YearlySpendingSummary | null;
 };
 
 const TABS: Array<{ key: TabKey; label: string }> = [
@@ -55,7 +70,28 @@ const THEME_COLORS: ThemeColor[] = [
   { key: 'amber', label: 'Amber', primary: '#9a5f00', soft: '#fff0dc' },
 ];
 
+const MONTH_OPTIONS = [
+  { value: 1, label: 'OCAK' },
+  { value: 2, label: 'SUBAT' },
+  { value: 3, label: 'MART' },
+  { value: 4, label: 'NISAN' },
+  { value: 5, label: 'MAYIS' },
+  { value: 6, label: 'HAZIRAN' },
+  { value: 7, label: 'TEMMUZ' },
+  { value: 8, label: 'AGUSTOS' },
+  { value: 9, label: 'EYLUL' },
+  { value: 10, label: 'EKIM' },
+  { value: 11, label: 'KASIM' },
+  { value: 12, label: 'ARALIK' },
+];
+
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+const DEFAULT_CATEGORY_OPTIONS = ['Market', 'Food', 'Transport', 'Other'];
+
 export function HomeScreen({
+  analysisError,
+  isLoadingAnalysis,
   isLoadingReceipts,
   isOcrProcessing,
   isSavingReceipt,
@@ -63,36 +99,34 @@ export function HomeScreen({
   latestOcr,
   latestPhotoUri,
   latestUpload,
+  monthlySummary,
   ocrError,
   onOpenCamera,
   onPickPhoto,
+  onRefreshAnalysis,
   onRefreshReceipts,
   onReturnToAuth,
+  onSelectAnalysisMonth,
+  onSelectAnalysisYear,
   parsedReceipt,
   receipts,
   receiptsError,
   savedReceipt,
   saveError,
+  selectedAnalysisMonth,
+  selectedAnalysisYear,
   session,
   uploadError,
+  yearlySummary,
 }: HomeScreenProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('entry');
   const [themeColorKey, setThemeColorKey] = useState<ThemeColorKey>('green');
+  const [openAnalysisSelect, setOpenAnalysisSelect] = useState<'year' | 'month' | 'category' | null>(null);
+  const [selectedAnalysisCategory, setSelectedAnalysisCategory] = useState<AnalysisCategoryKey>('All');
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [copyMessage, setCopyMessage] = useState('');
 
   const themeColor = THEME_COLORS.find((color) => color.key === themeColorKey) ?? THEME_COLORS[0];
-
-  const analysisSummary = useMemo(() => {
-    const totalAmount = receipts.reduce((sum, receipt) => sum + (receipt.total_amount ?? 0), 0);
-    const marketCount = receipts.filter((receipt) => receipt.category === 'Market').length;
-
-    return {
-      receiptCount: receipts.length,
-      totalAmount,
-      marketCount,
-    };
-  }, [receipts]);
 
   async function handleSignOut() {
     if (!supabase) {
@@ -113,6 +147,19 @@ export function HomeScreen({
     return amount === null ? '-' : `${amount.toFixed(2)} TL`;
   }
 
+  function formatTaxRate(rate: number | null) {
+    return rate === null ? 'Bulunamadi' : `%${rate}`;
+  }
+
+  function formatTaxAmount(amount: number | null) {
+    return amount === null ? 'Bulunamadi' : `${amount.toFixed(2)} TL`;
+  }
+
+  function formatSummaryAmount(amount: number | string | null | undefined) {
+    const numericAmount = typeof amount === 'string' ? Number(amount) : amount;
+    return typeof numericAmount === 'number' && Number.isFinite(numericAmount) ? `${numericAmount.toFixed(2)} TL` : '0.00 TL';
+  }
+
   function formatReceiptDate(date: string | null, createdAt: string) {
     const dateText = date ?? createdAt.slice(0, 10);
     const [year, month, day] = dateText.split('-');
@@ -131,6 +178,49 @@ export function HomeScreen({
       default:
         return { icon: '?', color: '#52645d', backgroundColor: '#eef2ef' };
     }
+  }
+
+  function getSortedTotals(totals: Record<string, number> | null | undefined) {
+    return Object.entries(totals ?? {})
+      .map(([label, amount]) => ({ label, amount: Number(amount) }))
+      .filter(({ amount }) => Number.isFinite(amount))
+      .sort((left, right) => right.amount - left.amount);
+  }
+
+  function attachCounts(
+    totals: Array<{ label: string; amount: number }>,
+    counts: Record<string, number> | null | undefined,
+  ) {
+    return totals.map((row) => ({
+      ...row,
+      count: Number(counts?.[row.label] ?? 0),
+    }));
+  }
+
+  function getSelectedMonthLabel() {
+    return MONTH_OPTIONS.find((month) => month.value === selectedAnalysisMonth)?.label ?? String(selectedAnalysisMonth);
+  }
+
+  function getCategoryOptions() {
+    const categorySet = new Set([
+      ...DEFAULT_CATEGORY_OPTIONS,
+      ...Object.keys(monthlySummary?.category_totals ?? {}),
+      ...Object.keys(yearlySummary?.category_totals ?? {}),
+    ]);
+
+    return ['All', ...categorySet];
+  }
+
+  function getSelectedCategoryLabel() {
+    return selectedAnalysisCategory === 'All' ? 'HEPSI' : selectedAnalysisCategory.toUpperCase();
+  }
+
+  function getCategoryAmount(totals: Record<string, number> | null | undefined) {
+    if (selectedAnalysisCategory === 'All') {
+      return null;
+    }
+
+    return Number(totals?.[selectedAnalysisCategory] ?? 0);
   }
 
   function renderEntryTab() {
@@ -223,6 +313,8 @@ export function HomeScreen({
               label="Tutar"
               value={parsedReceipt.totalAmount === null ? 'Bulunamadi' : `${parsedReceipt.totalAmount.toFixed(2)} TL`}
             />
+            <InfoRow label="KDV orani" value={formatTaxRate(parsedReceipt.taxRate)} />
+            <InfoRow label="KDV tutari" value={formatTaxAmount(parsedReceipt.taxAmount)} />
             <InfoRow label="Tarih" value={parsedReceipt.date ?? 'Bulunamadi'} />
             <InfoRow label="Kategori" value={parsedReceipt.category ?? 'Henuz atanmadi'} />
             <InfoRow
@@ -303,15 +395,176 @@ export function HomeScreen({
   }
 
   function renderAnalysisTab() {
+    const monthlyCategoryTotals = attachCounts(
+      getSortedTotals(monthlySummary?.category_totals),
+      monthlySummary?.category_counts,
+    );
+    const yearlyCategoryTotals = attachCounts(
+      getSortedTotals(yearlySummary?.category_totals),
+      yearlySummary?.category_counts,
+    );
+    const categoryOptions = getCategoryOptions();
+    const filteredMonthlyCategoryTotals =
+      selectedAnalysisCategory === 'All'
+        ? monthlyCategoryTotals
+        : monthlyCategoryTotals.filter((row) => row.label === selectedAnalysisCategory);
+    const filteredYearlyCategoryTotals =
+      selectedAnalysisCategory === 'All'
+        ? yearlyCategoryTotals
+        : yearlyCategoryTotals.filter((row) => row.label === selectedAnalysisCategory);
+    const selectedMonthlyAmount = getCategoryAmount(monthlySummary?.category_totals);
+    const selectedYearlyAmount = getCategoryAmount(yearlySummary?.category_totals);
+    const yearlyMonthlyTotals = MONTH_OPTIONS.map((month) => ({
+      label: month.label,
+      amount: Number(yearlySummary?.monthly_totals?.[String(month.value)] ?? 0),
+    })).filter(({ amount }) => amount > 0);
+
     return (
       <View style={styles.analysisPanel}>
-        <Text style={styles.sectionTitle}>ANALIZ</Text>
-        <Text style={styles.sectionSubtitle}>Gun 12 icin temel hazirlik</Text>
-        <View style={styles.metricGrid}>
-          <Metric label="FIS SAYISI" value={String(analysisSummary.receiptCount)} />
-          <Metric label="Toplam" value={`${analysisSummary.totalAmount.toFixed(2)} TL`} />
-          <Metric label="Market fisleri" value={String(analysisSummary.marketCount)} />
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>ANALIZ</Text>
+            <Text style={styles.sectionSubtitle}>AYLIK VE YILLIK OZETLER</Text>
+          </View>
+          <Pressable onPress={onRefreshAnalysis} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
+            <Text style={[styles.refreshButtonText, { color: themeColor.primary }]}>YENILE</Text>
+          </Pressable>
         </View>
+
+        <View style={styles.selectorBlock}>
+          <Text style={styles.selectorLabel}>YIL</Text>
+          <Pressable
+            onPress={() => setOpenAnalysisSelect(openAnalysisSelect === 'year' ? null : 'year')}
+            style={[styles.selectButton, { borderColor: openAnalysisSelect === 'year' ? themeColor.primary : '#d8e3dd' }]}
+          >
+            <Text style={styles.selectButtonText}>{selectedAnalysisYear}</Text>
+            <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
+              {openAnalysisSelect === 'year' ? '▲' : '▼'}
+            </Text>
+          </Pressable>
+          {openAnalysisSelect === 'year' ? (
+            <View style={styles.selectMenu}>
+              {YEAR_OPTIONS.map((year) => {
+                const isSelected = year === selectedAnalysisYear;
+
+                return (
+                  <Pressable
+                    key={year}
+                    onPress={() => {
+                      onSelectAnalysisYear(year);
+                      setOpenAnalysisSelect(null);
+                    }}
+                    style={[styles.selectOption, isSelected && { backgroundColor: themeColor.soft }]}
+                  >
+                    <Text style={[styles.selectOptionText, isSelected && { color: themeColor.primary }]}>
+                      {year}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.selectorBlock}>
+          <Text style={styles.selectorLabel}>KATEGORI</Text>
+          <Pressable
+            onPress={() => setOpenAnalysisSelect(openAnalysisSelect === 'category' ? null : 'category')}
+            style={[
+              styles.selectButton,
+              { borderColor: openAnalysisSelect === 'category' ? themeColor.primary : '#d8e3dd' },
+            ]}
+          >
+            <Text style={styles.selectButtonText}>{getSelectedCategoryLabel()}</Text>
+            <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
+              {openAnalysisSelect === 'category' ? '▲' : '▼'}
+            </Text>
+          </Pressable>
+          {openAnalysisSelect === 'category' ? (
+            <View style={styles.selectMenu}>
+              {categoryOptions.map((category) => {
+                const isSelected = category === selectedAnalysisCategory;
+                const label = category === 'All' ? 'HEPSI' : category.toUpperCase();
+
+                return (
+                  <Pressable
+                    key={category}
+                    onPress={() => {
+                      setSelectedAnalysisCategory(category);
+                      setOpenAnalysisSelect(null);
+                    }}
+                    style={[styles.selectOption, isSelected && { backgroundColor: themeColor.soft }]}
+                  >
+                    <Text style={[styles.selectOptionText, isSelected && { color: themeColor.primary }]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.selectorBlock}>
+          <Text style={styles.selectorLabel}>AY</Text>
+          <Pressable
+            onPress={() => setOpenAnalysisSelect(openAnalysisSelect === 'month' ? null : 'month')}
+            style={[styles.selectButton, { borderColor: openAnalysisSelect === 'month' ? themeColor.primary : '#d8e3dd' }]}
+          >
+            <Text style={styles.selectButtonText}>{getSelectedMonthLabel()}</Text>
+            <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
+              {openAnalysisSelect === 'month' ? '▲' : '▼'}
+            </Text>
+          </Pressable>
+          {openAnalysisSelect === 'month' ? (
+            <View style={styles.selectMenu}>
+              {MONTH_OPTIONS.map((month) => {
+                const isSelected = month.value === selectedAnalysisMonth;
+
+                return (
+                  <Pressable
+                    key={month.value}
+                    onPress={() => {
+                      onSelectAnalysisMonth(month.value);
+                      setOpenAnalysisSelect(null);
+                    }}
+                    style={[styles.selectOption, isSelected && { backgroundColor: themeColor.soft }]}
+                  >
+                    <Text style={[styles.selectOptionText, isSelected && { color: themeColor.primary }]}>
+                      {month.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+
+        {isLoadingAnalysis ? (
+          <View style={styles.processingRow}>
+            <ActivityIndicator color={themeColor.primary} />
+            <Text style={styles.processingText}>Analiz yukleniyor.</Text>
+          </View>
+        ) : null}
+
+        {analysisError ? <Text style={styles.errorText}>{analysisError}</Text> : null}
+
+        <View style={styles.metricGrid}>
+          <Metric
+            label={selectedAnalysisCategory === 'All' ? 'AYLIK TOPLAM' : 'AYLIK KATEGORI'}
+            value={formatSummaryAmount(selectedMonthlyAmount ?? monthlySummary?.total_amount)}
+          />
+          <Metric label="AYLIK FIS" value={String(monthlySummary?.receipt_count ?? 0)} />
+          <Metric
+            label={selectedAnalysisCategory === 'All' ? 'YILLIK TOPLAM' : 'YILLIK KATEGORI'}
+            value={formatSummaryAmount(selectedYearlyAmount ?? yearlySummary?.total_amount)}
+          />
+          <Metric label="YILLIK FIS" value={String(yearlySummary?.receipt_count ?? 0)} />
+        </View>
+
+        <SummaryBreakdown title="AYLIK KATEGORI" rows={filteredMonthlyCategoryTotals} />
+        <SummaryBreakdown title="YILLIK KATEGORI" rows={filteredYearlyCategoryTotals} />
+        <SummaryBreakdown title="YILLIK AY DAGILIMI" rows={yearlyMonthlyTotals} />
       </View>
     );
   }
@@ -425,6 +678,29 @@ function Metric({ label, value }: { label: string; value: string }) {
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SummaryBreakdown({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: Array<{ label: string; amount: number; count?: number }>;
+}) {
+  return (
+    <View style={styles.breakdownPanel}>
+      <Text style={styles.breakdownTitle}>{title}</Text>
+      {rows.length === 0 ? <Text style={styles.emptyText}>Bu secim icin veri yok.</Text> : null}
+      {rows.map((row) => (
+        <View key={row.label} style={styles.breakdownRow}>
+          <Text style={styles.breakdownLabel}>
+            {row.count === undefined ? row.label : `${row.label} • ${row.count} FIS`}
+          </Text>
+          <Text style={styles.breakdownAmount}>{`${row.amount.toFixed(2)} TL`}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -730,6 +1006,52 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 14,
   },
+  selectorBlock: {
+    gap: 8,
+  },
+  selectorLabel: {
+    color: '#52645d',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  selectButton: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#f7faf8',
+    paddingHorizontal: 12,
+  },
+  selectButtonText: {
+    color: '#12231d',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  selectChevron: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  selectMenu: {
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#ffffff',
+  },
+  selectOption: {
+    minHeight: 40,
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2ef',
+    paddingHorizontal: 12,
+  },
+  selectOptionText: {
+    color: '#52645d',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   metricGrid: {
     gap: 10,
   },
@@ -747,6 +1069,35 @@ const styles = StyleSheet.create({
   metricValue: {
     color: '#12231d',
     fontSize: 20,
+    fontWeight: '900',
+  },
+  breakdownPanel: {
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2ef',
+    paddingTop: 12,
+  },
+  breakdownTitle: {
+    color: '#12231d',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  breakdownRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  breakdownLabel: {
+    flex: 1,
+    color: '#52645d',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  breakdownAmount: {
+    color: '#12231d',
+    fontSize: 13,
     fontWeight: '900',
   },
   accountPanel: {

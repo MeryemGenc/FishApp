@@ -10,6 +10,8 @@ type ReceiptParserCase = {
   expected: {
     merchant: string | null;
     totalAmount: number | null;
+    taxAmount?: number | null;
+    taxRate?: number | null;
     date: string | null;
     category: string | null;
   };
@@ -21,6 +23,8 @@ const CASES: ReceiptParserCase[] = [
     expected: {
       merchant: 'BIM',
       totalAmount: 188,
+      taxAmount: 12.13,
+      taxRate: 20,
       date: '2026-04-28',
       category: 'Market',
     },
@@ -30,6 +34,8 @@ const CASES: ReceiptParserCase[] = [
     expected: {
       merchant: 'GULMAR',
       totalAmount: 1137.72,
+      taxAmount: 11.26,
+      taxRate: null,
       date: '2026-04-30',
       category: 'Market',
     },
@@ -39,6 +45,8 @@ const CASES: ReceiptParserCase[] = [
     expected: {
       merchant: 'A101',
       totalAmount: 609,
+      taxAmount: 6.03,
+      taxRate: 1,
       date: '2026-04-30',
       category: 'Market',
     },
@@ -48,6 +56,8 @@ const CASES: ReceiptParserCase[] = [
     expected: {
       merchant: 'SOK MARKET',
       totalAmount: 100,
+      taxAmount: 16.67,
+      taxRate: 20,
       date: '2026-05-01',
       category: 'Market',
     },
@@ -57,6 +67,8 @@ const CASES: ReceiptParserCase[] = [
     expected: {
       merchant: 'SOK MARKET',
       totalAmount: 205.75,
+      taxAmount: 65.27,
+      taxRate: null,
       date: '2026-05-04',
       category: 'Market',
     },

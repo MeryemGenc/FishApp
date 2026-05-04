@@ -3,10 +3,19 @@ import { KNOWN_MERCHANTS } from './receiptMerchants';
 export type ParsedReceipt = {
   merchant: string | null;
   totalAmount: number | null;
+  taxAmount: number | null;
+  taxRate: number | null;
+  taxBreakdown: TaxBreakdownItem[];
   date: string | null;
   category: string | null;
   confidence: number | null;
   rawText: string;
+};
+
+export type TaxBreakdownItem = {
+  rate: number;
+  amount: number | null;
+  totalWithTax: number | null;
 };
 
 function getLines(rawText: string) {
@@ -45,6 +54,33 @@ function normalizeAmount(amountText: string) {
   return Number(`${integerPart}.${decimalPart}`);
 }
 
+function isValidTaxRate(rate: number) {
+  return [1, 8, 10, 18, 20].includes(rate);
+}
+
+function parseTaxRateText(rateText: string) {
+  const normalizedRate = Number(rateText.replace(',', '.'));
+
+  if (!Number.isFinite(normalizedRate)) {
+    return null;
+  }
+
+  const roundedRate = Number(normalizedRate.toFixed(2));
+  return isValidTaxRate(roundedRate) ? roundedRate : null;
+}
+
+function getTaxRatesFromLine(line: string) {
+  const normalizedLine = normalizeText(line);
+
+  if (/GUVEN|SKOR|Z\s*NO/.test(normalizedLine)) {
+    return [];
+  }
+
+  return [...line.matchAll(/%\s*(\d{1,2}(?:[.,]\d{1,2})?)/g)]
+    .map((match) => parseTaxRateText(match[1]))
+    .filter((rate): rate is number => rate !== null);
+}
+
 function parseMerchant(rawText: string) {
   const normalizedText = normalizeText(rawText);
   const knownMerchant = KNOWN_MERCHANTS.find(({ keywords }) =>
@@ -60,6 +96,102 @@ function parseMerchant(rawText: string) {
   const merchantLine = lines.find((line) => line.length >= 3 && !ignoredLinePattern.test(line));
 
   return merchantLine ?? null;
+}
+
+function parseTaxAmount(rawText: string) {
+  const amountPattern = /([*#]?\s*(?:\d{1,3}(?:[.,]\d{3})+[.,]\d{2}|\d{1,6}[.,]\d{2}))/g;
+  const lines = getLines(rawText);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const normalizedLine = normalizeText(line);
+    const isTaxTotalLine = /TOPLAM\s+KDV|TOP\s*KDV|TOPKDV|KDV\s*TUTAR|^KDV[:\s]*$|^KDV[:\s]/.test(normalizedLine);
+    const isTaxHeaderLine = /KDV\s+ORANI|KDV\s+DAHIL|KDV\s+MATRAH/.test(normalizedLine);
+
+    if (!isTaxTotalLine || isTaxHeaderLine) {
+      continue;
+    }
+
+    const sameLineAmountText = [...line.matchAll(amountPattern)].map((match) => match[1]).at(-1);
+    const nextAmountLine = lines.slice(index + 1, index + 4).find((windowLine) => {
+      const normalizedWindowLine = normalizeText(windowLine);
+      return (
+        !/KDV\s+ORANI|KDV\s+DAHIL|KDV\s+MATRAH/.test(normalizedWindowLine) &&
+        [...windowLine.matchAll(amountPattern)].length > 0
+      );
+    });
+    const amountText = sameLineAmountText ?? [...(nextAmountLine ?? '').matchAll(amountPattern)].map((match) => match[1]).at(-1);
+
+    if (!amountText) {
+      continue;
+    }
+
+    const amount = normalizeAmount(amountText);
+
+    if (Number.isFinite(amount)) {
+      return amount;
+    }
+  }
+
+  return null;
+}
+
+function parseTaxBreakdown(rawText: string, taxAmount: number | null): TaxBreakdownItem[] {
+  const amountPattern = /([*#]?\s*(?:\d{1,3}(?:[.,]\d{3})+[.,]\d{2}|\d{1,6}[.,]\d{2}))/g;
+  const lines = getLines(rawText);
+  const knownRates = new Set<number>();
+  const breakdown: TaxBreakdownItem[] = [];
+
+  lines.forEach((line) => {
+    getTaxRatesFromLine(line).forEach((rate) => knownRates.add(rate));
+  });
+
+  lines.forEach((line, index) => {
+    const normalizedLine = normalizeText(line);
+
+    if (!/KDV\s+ORANI/.test(normalizedLine)) {
+      return;
+    }
+
+    const rate = lines.slice(index, index + 4).flatMap(getTaxRatesFromLine)[0];
+    const amountTexts = lines
+      .slice(index, index + 8)
+      .flatMap((windowLine) => [...windowLine.matchAll(amountPattern)].map((match) => match[1]));
+    const amounts = amountTexts.map(normalizeAmount).filter((amount) => Number.isFinite(amount));
+
+    if (rate) {
+      breakdown.push({
+        rate,
+        totalWithTax: amounts[0] ?? null,
+        amount: amounts.at(-1) ?? taxAmount,
+      });
+    }
+  });
+
+  if (breakdown.length > 0) {
+    return breakdown;
+  }
+
+  if (knownRates.size === 1) {
+    return [{ rate: [...knownRates][0], amount: taxAmount, totalWithTax: null }];
+  }
+
+  return [...knownRates].map((rate) => ({ rate, amount: null, totalWithTax: null }));
+}
+
+function parseTaxRate(taxBreakdown: TaxBreakdownItem[]) {
+  if (taxBreakdown.length === 0) {
+    return null;
+  }
+
+  const ratesWithKnownAmount = taxBreakdown.filter((item) => item.amount !== null);
+
+  if (ratesWithKnownAmount.length === 1) {
+    return ratesWithKnownAmount[0].rate;
+  }
+
+  const uniqueRates = new Set(taxBreakdown.map((item) => item.rate));
+  return uniqueRates.size === 1 ? [...uniqueRates][0] : null;
 }
 
 function parseTotalAmount(rawText: string) {
@@ -144,9 +276,15 @@ function parseDate(rawText: string) {
 }
 
 export function parseReceipt(rawText: string): ParsedReceipt {
+  const taxAmount = parseTaxAmount(rawText);
+  const taxBreakdown = parseTaxBreakdown(rawText, taxAmount);
+
   return {
     merchant: parseMerchant(rawText),
     totalAmount: parseTotalAmount(rawText),
+    taxAmount,
+    taxRate: parseTaxRate(taxBreakdown),
+    taxBreakdown,
     date: parseDate(rawText),
     category: null,
     confidence: null,
