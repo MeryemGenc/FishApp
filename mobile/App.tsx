@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { AuthScreen } from './src/components/AuthScreen';
@@ -11,7 +11,7 @@ import { categorizeReceiptWithAiFallback } from './src/services/receiptAiCategor
 import { categorizeReceiptWithRules } from './src/services/receiptCategorizer';
 import { parseReceipt, type ParsedReceipt } from './src/services/receiptParser';
 import { extractReceiptText, type ReceiptOcrResult } from './src/services/receiptOcr';
-import { saveReceipt, type SavedReceipt } from './src/services/receiptRepository';
+import { listReceipts, saveReceipt, type ReceiptListItem, type SavedReceipt } from './src/services/receiptRepository';
 import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
 
 export default function App() {
@@ -28,6 +28,38 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
+  const [receipts, setReceipts] = useState<ReceiptListItem[]>([]);
+  const [receiptsError, setReceiptsError] = useState('');
+  const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
+
+  async function refreshReceipts(userId = session?.user.id) {
+    if (!userId) {
+      setReceipts([]);
+      setReceiptsError('');
+      return;
+    }
+
+    setIsLoadingReceipts(true);
+    setReceiptsError('');
+
+    try {
+      const nextReceipts = await listReceipts(userId);
+      setReceipts(nextReceipts);
+    } catch (error) {
+      setReceiptsError(error instanceof Error ? error.message : 'Fis listesi yuklenemedi.');
+    } finally {
+      setIsLoadingReceipts(false);
+    }
+  }
+
+  useEffect(() => {
+    if (session) {
+      void refreshReceipts(session.user.id);
+    } else {
+      setReceipts([]);
+      setReceiptsError('');
+    }
+  }, [session]);
 
   function resetReceiptFlow() {
     setActiveScreen('home');
@@ -42,6 +74,9 @@ export default function App() {
     setIsUploading(false);
     setIsOcrProcessing(false);
     setIsSavingReceipt(false);
+    setReceipts([]);
+    setReceiptsError('');
+    setIsLoadingReceipts(false);
   }
 
   async function processReceiptPhoto(photoUri: string) {
@@ -98,6 +133,7 @@ export default function App() {
             parsedReceipt: parsed,
           });
           setSavedReceipt(saved);
+          await refreshReceipts(session.user.id);
         } catch (error) {
           setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
         } finally {
@@ -152,6 +188,7 @@ export default function App() {
       {(session || latestPhotoUri) && activeScreen === 'home' ? (
         <HomeScreen
           isOcrProcessing={isOcrProcessing}
+          isLoadingReceipts={isLoadingReceipts}
           isSavingReceipt={isSavingReceipt}
           isUploading={isUploading}
           latestOcr={latestOcr}
@@ -162,6 +199,9 @@ export default function App() {
           onPickPhoto={handlePickPhoto}
           onReturnToAuth={resetReceiptFlow}
           parsedReceipt={parsedReceipt}
+          receipts={receipts}
+          receiptsError={receiptsError}
+          onRefreshReceipts={() => refreshReceipts()}
           savedReceipt={savedReceipt}
           saveError={saveError}
           session={session}

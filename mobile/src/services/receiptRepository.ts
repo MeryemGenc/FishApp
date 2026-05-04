@@ -12,6 +12,11 @@ export type SavedReceipt = {
   created_at: string;
 };
 
+export type ReceiptListItem = Pick<
+  SavedReceipt,
+  'id' | 'image_url' | 'merchant' | 'total_amount' | 'date' | 'category' | 'confidence' | 'created_at'
+>;
+
 type SaveReceiptInput = {
   userId: string;
   imageUrl: string | null;
@@ -47,4 +52,24 @@ export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveRecei
   }
 
   return data;
+}
+
+export async function listReceipts(userId: string): Promise<ReceiptListItem[]> {
+  if (!supabase) {
+    throw new Error('Supabase env bilgileri eklenmeden fis listesi calismaz.');
+  }
+
+  const { data, error } = await supabase
+    .from('receipts')
+    .select('id, image_url, merchant, total_amount, date, category, confidence, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+    .returns<ReceiptListItem[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
 }
