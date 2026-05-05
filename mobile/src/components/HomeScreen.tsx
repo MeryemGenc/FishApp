@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 
 import { supabase } from '../lib/supabase';
 import type { ReceiptOcrResult } from '../services/receiptOcr';
@@ -14,9 +15,20 @@ import type {
 } from '../services/receiptRepository';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
 
-type TabKey = 'entry' | 'receipts' | 'analysis' | 'account';
+type TabKey = 'home' | 'entry' | 'receipts' | 'analysis' | 'account';
 type ThemeColorKey = 'green' | 'blue' | 'rose' | 'amber';
 type AnalysisCategoryKey = 'All' | string;
+
+type CategoryTotalRow = {
+  label: string;
+  amount: number;
+  count?: number;
+};
+
+type ChartSegment = CategoryTotalRow & {
+  color: string;
+  percent: number;
+};
 
 type ThemeColor = {
   key: ThemeColorKey;
@@ -56,11 +68,11 @@ type HomeScreenProps = {
   yearlySummary: YearlySpendingSummary | null;
 };
 
-const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'entry', label: 'FIS GIRISI' },
-  { key: 'receipts', label: 'FISLERIM' },
-  { key: 'analysis', label: 'ANALIZ' },
-  { key: 'account', label: 'HESABIM' },
+const TABS: Array<{ key: Exclude<TabKey, 'entry'>; label: string; icon: string }> = [
+  { key: 'home', label: 'ANA SAYFA', icon: 'H' },
+  { key: 'analysis', label: 'ANALIZ', icon: 'A' },
+  { key: 'receipts', label: 'GECMIS', icon: 'G' },
+  { key: 'account', label: 'PROFIL', icon: 'P' },
 ];
 
 const THEME_COLORS: ThemeColor[] = [
@@ -88,6 +100,14 @@ const MONTH_OPTIONS = [
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
 const DEFAULT_CATEGORY_OPTIONS = ['Market', 'Food', 'Transport', 'Other'];
+const CATEGORY_CHART_COLORS: Record<string, string> = {
+  Market: '#21725e',
+  Food: '#d88722',
+  Transport: '#1c5b9b',
+  Bills: '#7d4fb8',
+  Health: '#b63c5f',
+  Other: '#6f7d76',
+};
 
 export function HomeScreen({
   analysisError,
@@ -119,7 +139,7 @@ export function HomeScreen({
   uploadError,
   yearlySummary,
 }: HomeScreenProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('entry');
+  const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [themeColorKey, setThemeColorKey] = useState<ThemeColorKey>('green');
   const [openAnalysisSelect, setOpenAnalysisSelect] = useState<'year' | 'month' | 'category' | null>(null);
   const [selectedAnalysisCategory, setSelectedAnalysisCategory] = useState<AnalysisCategoryKey>('All');
@@ -180,6 +200,10 @@ export function HomeScreen({
     }
   }
 
+  function getCategoryColor(category: string) {
+    return CATEGORY_CHART_COLORS[category] ?? CATEGORY_CHART_COLORS.Other;
+  }
+
   function getSortedTotals(totals: Record<string, number> | null | undefined) {
     return Object.entries(totals ?? {})
       .map(([label, amount]) => ({ label, amount: Number(amount) }))
@@ -223,45 +247,161 @@ export function HomeScreen({
     return Number(totals?.[selectedAnalysisCategory] ?? 0);
   }
 
+  function getDashboardInsight(rows: CategoryTotalRow[], totalAmount: number) {
+    const topCategory = rows[0];
+
+    if (!topCategory || totalAmount <= 0) {
+      return 'BU SECIM ICIN HENUZ ANALIZ VERISI YOK.';
+    }
+
+    const topPercent = Math.round((topCategory.amount / totalAmount) * 100);
+    return `HARCAMANIN %${topPercent} KISMI ${topCategory.label.toUpperCase()} KATEGORISINDE.`;
+  }
+
+  function renderHomeTab() {
+    const monthlyCategoryTotals = attachCounts(
+      getSortedTotals(monthlySummary?.category_totals),
+      monthlySummary?.category_counts,
+    );
+    const monthlyChartSegments = monthlyCategoryTotals.map((row) => ({
+      ...row,
+      color: getCategoryColor(row.label),
+      percent: monthlySummary?.total_amount ? row.amount / monthlySummary.total_amount : 0,
+    }));
+
+    return (
+      <>
+        <View style={styles.homeHeader}>
+          <View>
+            <Text style={styles.homeGreeting}>MERHABA,</Text>
+            <Text style={styles.homeTitle}>{session?.user.email?.split('@')[0] ?? 'FISHAPP'}</Text>
+          </View>
+          <View style={styles.notificationButton}>
+            <Text style={[styles.notificationIcon, { color: themeColor.primary }]}>!</Text>
+          </View>
+        </View>
+
+        <View style={styles.periodSwitcher}>
+          {['GUN', 'HAFTA', 'AY', 'YIL'].map((period) => {
+            const isSelected = period === 'AY';
+
+            return (
+              <View
+                key={period}
+                style={[
+                  styles.periodOption,
+                  isSelected && { backgroundColor: themeColor.primary },
+                ]}
+              >
+                <Text style={[styles.periodText, isSelected && styles.periodTextActive]}>{period}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={styles.homeDashboardCard}>
+          <View style={styles.homeDashboardTop}>
+            <View>
+              <Text style={styles.dashboardEyebrow}>BU AY TOPLAM HARCAMA</Text>
+              <Text style={styles.homeDashboardAmount}>{formatSummaryAmount(monthlySummary?.total_amount)}</Text>
+            </View>
+            <View style={styles.trendPill}>
+              <Text style={[styles.trendPillText, { color: themeColor.primary }]}>-8.2%</Text>
+            </View>
+          </View>
+
+          <PieChart segments={monthlyChartSegments} totalLabel={formatSummaryAmount(monthlySummary?.total_amount)} />
+
+          <View style={styles.chartLegend}>
+            {monthlyCategoryTotals.slice(0, 6).map((row) => (
+              <View key={row.label} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getCategoryColor(row.label) }]} />
+                <Text style={styles.legendText}>{row.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.homeCategoryCard}>
+          <Text style={styles.breakdownTitle}>KATEGORI DAGILIMI</Text>
+          {monthlyCategoryTotals.length === 0 ? <Text style={styles.emptyText}>Bu ay icin henuz veri yok.</Text> : null}
+          {monthlyCategoryTotals.slice(0, 5).map((row) => (
+            <HomeCategoryRow
+              key={row.label}
+              color={getCategoryColor(row.label)}
+              row={row}
+              totalAmount={monthlySummary?.total_amount ?? 0}
+            />
+          ))}
+        </View>
+      </>
+    );
+  }
+
   function renderEntryTab() {
     return (
       <>
-        <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: themeColor.primary }]}>FishApp</Text>
-          <Text style={styles.title}>FIS GIRISI</Text>
-          <Text style={styles.subtitle}>
-            {session
-              ? 'Yeni fis fotografi cekebilir veya galeriden secebilirsin.'
-              : 'Demo modunda kamera, OCR ve parsing akisini test ediyorsun.'}
-          </Text>
+        <View style={styles.uploadHeader}>
+          <Pressable onPress={() => setActiveTab('home')} style={styles.backButton}>
+            <Text style={[styles.backButtonText, { color: themeColor.primary }]}>{'<'}</Text>
+          </Pressable>
+          <Text style={styles.title}>FIS YUKLE</Text>
         </View>
 
-        <View style={styles.panel}>
-          <Text style={styles.panelLabel}>Gun 11 durumu</Text>
-          <Text style={[styles.panelValue, { color: themeColor.primary }]}>FIS LISTESI HAZIR</Text>
+        <View style={styles.uploadDropzone}>
+          <View style={[styles.uploadIconBox, { backgroundColor: themeColor.soft }]}>
+            <Text style={[styles.uploadIconText, { color: themeColor.primary }]}>F</Text>
+          </View>
+          <Text style={styles.uploadDropTitle}>FISINI BURAYA EKLE</Text>
+          <Text style={styles.uploadDropSubtitle}>PNG, JPG VEYA PDF - MAKS. 10 MB</Text>
+          <Pressable
+            onPress={onPickPhoto}
+            style={({ pressed }) => [
+              styles.fileSelectButton,
+              { backgroundColor: themeColor.soft },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.fileSelectButtonText, { color: themeColor.primary }]}>DOSYA SEC</Text>
+          </Pressable>
         </View>
 
-        <Pressable
-          onPress={onOpenCamera}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            { backgroundColor: themeColor.primary },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.primaryButtonText}>FIS FOTOGRAFI CEK</Text>
-        </Pressable>
+        <View style={styles.uploadDividerRow}>
+          <View style={styles.uploadDivider} />
+          <Text style={styles.uploadDividerText}>VEYA</Text>
+          <View style={styles.uploadDivider} />
+        </View>
 
-        <Pressable
-          onPress={onPickPhoto}
-          style={({ pressed }) => [
-            styles.galleryButton,
-            { borderColor: themeColor.primary },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.galleryButtonText, { color: themeColor.primary }]}>GALERIDEN SEC</Text>
-        </Pressable>
+        <View style={styles.uploadActionGrid}>
+          <Pressable
+            onPress={onOpenCamera}
+            style={({ pressed }) => [
+              styles.uploadActionCardPrimary,
+              { backgroundColor: themeColor.primary },
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.uploadActionIconPrimary}>
+              <Text style={styles.uploadActionIconTextPrimary}>C</Text>
+            </View>
+            <Text style={styles.uploadActionTitlePrimary}>FOTOGRAF CEK</Text>
+            <Text style={styles.uploadActionSubtitlePrimary}>KAMERAYI KULLAN</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onPickPhoto}
+            style={({ pressed }) => [
+              styles.uploadActionCardSecondary,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={[styles.uploadActionIconSecondary, { backgroundColor: themeColor.soft }]}>
+              <Text style={[styles.uploadActionIconTextSecondary, { color: themeColor.primary }]}>G</Text>
+            </View>
+            <Text style={styles.uploadActionTitleSecondary}>GALERIDEN SEC</Text>
+            <Text style={styles.uploadActionSubtitleSecondary}>FOTOGRAF SEC</Text>
+          </Pressable>
+        </View>
 
         {latestPhotoUri ? (
           <View style={styles.previewPanel}>
@@ -344,16 +484,27 @@ export function HomeScreen({
   }
 
   function renderReceiptsTab() {
+    const totalAmount = receipts.reduce((sum, receipt) => sum + (receipt.total_amount ?? 0), 0);
+    const averageAmount = receipts.length > 0 ? totalAmount / receipts.length : 0;
+
     return (
-      <View style={styles.receiptsPanel}>
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>FISLERIM</Text>
-            <Text style={styles.sectionSubtitle}>Kaydedilen son fislerin</Text>
-          </View>
-          <Pressable onPress={onRefreshReceipts} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
-            <Text style={[styles.refreshButtonText, { color: themeColor.primary }]}>YENILE</Text>
+      <>
+        <View style={styles.pageHeader}>
+          <Text style={styles.title}>FISLERIM</Text>
+          <Pressable onPress={onRefreshReceipts} style={({ pressed }) => [styles.filterButton, pressed && styles.pressed]}>
+            <Text style={[styles.filterButtonText, { color: themeColor.primary }]}>FILTRELE</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>S</Text>
+          <Text style={styles.searchPlaceholder}>FIS VEYA SIRKET ARA...</Text>
+        </View>
+
+        <View style={styles.receiptStatsRow}>
+          <MiniStat label="BU AY" value={`${receipts.length} FIS`} color={themeColor.primary} />
+          <MiniStat label="TOPLAM" value={formatSummaryAmount(totalAmount)} color={themeColor.primary} />
+          <MiniStat label="ORTALAMA" value={formatSummaryAmount(averageAmount)} color="#d88722" />
         </View>
 
         {isLoadingReceipts ? (
@@ -369,28 +520,33 @@ export function HomeScreen({
           <Text style={styles.emptyText}>Henuz kayitli fis yok.</Text>
         ) : null}
 
-        {receipts.map((receipt) => {
-          const categoryStyle = getCategoryStyle(receipt.category);
+        <View style={styles.receiptList}>
+          {receipts.map((receipt) => {
+            const categoryStyle = getCategoryStyle(receipt.category);
 
-          return (
-            <View key={receipt.id} style={styles.receiptRow}>
-              <View style={[styles.categoryIcon, { backgroundColor: categoryStyle.backgroundColor }]}>
-                <Text style={[styles.categoryIconText, { color: categoryStyle.color }]}>{categoryStyle.icon}</Text>
-              </View>
-              <View style={styles.receiptMain}>
-                <Text numberOfLines={1} style={styles.receiptMerchant}>
-                  {receipt.merchant ?? 'Bilinmeyen magaza'}
-                </Text>
-                <View style={styles.receiptMetaRow}>
-                  <Text style={[styles.receiptCategory, { color: themeColor.primary }]}>{receipt.category ?? 'Other'}</Text>
+            return (
+              <View key={receipt.id} style={styles.receiptCard}>
+                <View style={[styles.categoryIcon, { backgroundColor: categoryStyle.backgroundColor }]}>
+                  <Text style={[styles.categoryIconText, { color: categoryStyle.color }]}>{categoryStyle.icon}</Text>
+                </View>
+                <View style={styles.receiptMain}>
+                  <Text numberOfLines={1} style={styles.receiptMerchant}>
+                    {receipt.merchant ?? 'Bilinmeyen magaza'}
+                  </Text>
+                  <Text style={[styles.receiptCategoryPill, { color: themeColor.primary, backgroundColor: themeColor.soft }]}>
+                    {receipt.category ?? 'Other'}
+                  </Text>
                   <Text style={styles.receiptDate}>{formatReceiptDate(receipt.date, receipt.created_at)}</Text>
                 </View>
+                <View style={styles.receiptAmountBox}>
+                  <Text style={styles.receiptAmount}>{formatReceiptAmount(receipt.total_amount)}</Text>
+                  <Text style={styles.receiptTax}>KDV: {formatTaxAmount(receipt.tax_amount)}</Text>
+                </View>
               </View>
-              <Text style={styles.receiptAmount}>{formatReceiptAmount(receipt.total_amount)}</Text>
-            </View>
-          );
-        })}
-      </View>
+            );
+          })}
+        </View>
+      </>
     );
   }
 
@@ -414,6 +570,21 @@ export function HomeScreen({
         : yearlyCategoryTotals.filter((row) => row.label === selectedAnalysisCategory);
     const selectedMonthlyAmount = getCategoryAmount(monthlySummary?.category_totals);
     const selectedYearlyAmount = getCategoryAmount(yearlySummary?.category_totals);
+    const activeMonthlyAmount = selectedMonthlyAmount ?? monthlySummary?.total_amount ?? 0;
+    const activeYearlyAmount = selectedYearlyAmount ?? yearlySummary?.total_amount ?? 0;
+    const activeMonthlyCount =
+      selectedAnalysisCategory === 'All'
+        ? monthlySummary?.receipt_count ?? 0
+        : Number(monthlySummary?.category_counts?.[selectedAnalysisCategory] ?? 0);
+    const activeYearlyCount =
+      selectedAnalysisCategory === 'All'
+        ? yearlySummary?.receipt_count ?? 0
+        : Number(yearlySummary?.category_counts?.[selectedAnalysisCategory] ?? 0);
+    const monthlyChartSegments = monthlyCategoryTotals.map((row) => ({
+      ...row,
+      color: getCategoryColor(row.label),
+      percent: monthlySummary?.total_amount ? row.amount / monthlySummary.total_amount : 0,
+    }));
     const yearlyMonthlyTotals = MONTH_OPTIONS.map((month) => ({
       label: month.label,
       amount: Number(yearlySummary?.monthly_totals?.[String(month.value)] ?? 0),
@@ -439,7 +610,7 @@ export function HomeScreen({
           >
             <Text style={styles.selectButtonText}>{selectedAnalysisYear}</Text>
             <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
-              {openAnalysisSelect === 'year' ? '▲' : '▼'}
+              {openAnalysisSelect === 'year' ? '^' : 'v'}
             </Text>
           </Pressable>
           {openAnalysisSelect === 'year' ? (
@@ -477,7 +648,7 @@ export function HomeScreen({
           >
             <Text style={styles.selectButtonText}>{getSelectedCategoryLabel()}</Text>
             <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
-              {openAnalysisSelect === 'category' ? '▲' : '▼'}
+              {openAnalysisSelect === 'category' ? '^' : 'v'}
             </Text>
           </Pressable>
           {openAnalysisSelect === 'category' ? (
@@ -513,7 +684,7 @@ export function HomeScreen({
           >
             <Text style={styles.selectButtonText}>{getSelectedMonthLabel()}</Text>
             <Text style={[styles.selectChevron, { color: themeColor.primary }]}>
-              {openAnalysisSelect === 'month' ? '▲' : '▼'}
+              {openAnalysisSelect === 'month' ? '^' : 'v'}
             </Text>
           </Pressable>
           {openAnalysisSelect === 'month' ? (
@@ -549,20 +720,56 @@ export function HomeScreen({
 
         {analysisError ? <Text style={styles.errorText}>{analysisError}</Text> : null}
 
-        <View style={styles.metricGrid}>
-          <Metric
-            label={selectedAnalysisCategory === 'All' ? 'AYLIK TOPLAM' : 'AYLIK KATEGORI'}
-            value={formatSummaryAmount(selectedMonthlyAmount ?? monthlySummary?.total_amount)}
-          />
-          <Metric label="AYLIK FIS" value={String(monthlySummary?.receipt_count ?? 0)} />
-          <Metric
-            label={selectedAnalysisCategory === 'All' ? 'YILLIK TOPLAM' : 'YILLIK KATEGORI'}
-            value={formatSummaryAmount(selectedYearlyAmount ?? yearlySummary?.total_amount)}
-          />
-          <Metric label="YILLIK FIS" value={String(yearlySummary?.receipt_count ?? 0)} />
+        <View style={[styles.dashboardHero, { backgroundColor: themeColor.soft }]}>
+          <View style={styles.dashboardHeroText}>
+            <Text style={[styles.dashboardEyebrow, { color: themeColor.primary }]}>
+              {selectedAnalysisCategory === 'All' ? 'AYLIK TOPLAM HARCAMA' : `${getSelectedCategoryLabel()} AYLIK`}
+            </Text>
+            <Text style={styles.dashboardTotal}>{formatSummaryAmount(activeMonthlyAmount)}</Text>
+            <Text style={styles.dashboardMeta}>
+              {`${activeMonthlyCount} FIS - ${getSelectedMonthLabel()} ${selectedAnalysisYear}`}
+            </Text>
+          </View>
+          <View style={styles.dashboardYearPill}>
+            <Text style={styles.dashboardYearLabel}>YILLIK</Text>
+            <Text style={styles.dashboardYearValue}>{formatSummaryAmount(activeYearlyAmount)}</Text>
+            <Text style={styles.dashboardYearCount}>{`${activeYearlyCount} FIS`}</Text>
+          </View>
         </View>
 
-        <SummaryBreakdown title="AYLIK KATEGORI" rows={filteredMonthlyCategoryTotals} />
+        <View style={styles.chartPanel}>
+          <View style={styles.chartHeader}>
+            <View>
+              <Text style={styles.breakdownTitle}>KATEGORI DAGILIMI</Text>
+              <Text style={styles.chartSubtitle}>{`${getSelectedMonthLabel()} ${selectedAnalysisYear}`}</Text>
+            </View>
+            <Text style={[styles.chartTotal, { color: themeColor.primary }]}>
+              {formatSummaryAmount(monthlySummary?.total_amount)}
+            </Text>
+          </View>
+          <PieChart segments={monthlyChartSegments} />
+          <Text style={styles.insightText}>
+            {getDashboardInsight(monthlyCategoryTotals, monthlySummary?.total_amount ?? 0)}
+          </Text>
+        </View>
+
+        <View style={styles.categoryCardGrid}>
+          {filteredMonthlyCategoryTotals.length === 0 ? <Text style={styles.emptyText}>Bu secim icin veri yok.</Text> : null}
+          {filteredMonthlyCategoryTotals.map((row) => (
+            <CategoryDashboardCard
+              key={row.label}
+              color={getCategoryColor(row.label)}
+              row={row}
+              totalAmount={monthlySummary?.total_amount ?? 0}
+            />
+          ))}
+        </View>
+
+        <View style={styles.metricGrid}>
+          <Metric label="AYLIK FIS" value={String(activeMonthlyCount)} />
+          <Metric label="YILLIK FIS" value={String(activeYearlyCount)} />
+        </View>
+
         <SummaryBreakdown title="YILLIK KATEGORI" rows={filteredYearlyCategoryTotals} />
         <SummaryBreakdown title="YILLIK AY DAGILIMI" rows={yearlyMonthlyTotals} />
       </View>
@@ -570,10 +777,40 @@ export function HomeScreen({
   }
 
   function renderAccountTab() {
+    const monthlyTotal = Number(monthlySummary?.total_amount ?? 0);
+    const budget = 5000;
+    const saved = Math.max(budget - monthlyTotal, 0);
+    const savedPercent = Math.round((saved / budget) * 100);
+
     return (
-      <View style={styles.accountPanel}>
-        <Text style={styles.sectionTitle}>HESABIM</Text>
-        <Text style={styles.sectionSubtitle}>{session?.user.email ?? 'DEMO MODU'}</Text>
+      <>
+        <Text style={styles.title}>PROFILIM</Text>
+
+        <View style={styles.profileCard}>
+          <View style={[styles.profileAvatar, { backgroundColor: themeColor.primary }]}>
+            <Text style={styles.profileAvatarText}>{(session?.user.email ?? 'F').slice(0, 2).toUpperCase()}</Text>
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{session?.user.email?.split('@')[0] ?? 'FishApp Kullanici'}</Text>
+            <Text style={styles.profileEmail}>{session?.user.email ?? 'DEMO MODU'}</Text>
+            <Text style={[styles.profileBadge, { color: themeColor.primary }]}>PRO UYE</Text>
+          </View>
+        </View>
+
+        <View style={styles.budgetCard}>
+          <Text style={styles.breakdownTitle}>AYLIK BUTCE TASARRUFU</Text>
+          <View style={styles.budgetContent}>
+            <View style={[styles.budgetGauge, { backgroundColor: themeColor.soft }]}>
+              <Text style={[styles.budgetGaugeValue, { color: themeColor.primary }]}>{`%${savedPercent}`}</Text>
+              <Text style={styles.budgetGaugeLabel}>TASARRUF</Text>
+            </View>
+            <View style={styles.budgetRows}>
+              <InfoRow label="Butce" value={formatSummaryAmount(budget)} />
+              <InfoRow label="Harcanan" value={formatSummaryAmount(monthlyTotal)} />
+              <InfoRow label="Tasarruf" value={formatSummaryAmount(saved)} />
+            </View>
+          </View>
+        </View>
 
         <View style={styles.themePanel}>
           <Text style={styles.themeTitle}>TEMA RENGI</Text>
@@ -630,13 +867,14 @@ export function HomeScreen({
             <Text style={[styles.signOutButtonText, { color: themeColor.primary }]}>GIRIS EKRANINA DON</Text>
           </Pressable>
         )}
-      </View>
+      </>
     );
   }
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.container}>
+        {activeTab === 'home' ? renderHomeTab() : null}
         {activeTab === 'entry' ? renderEntryTab() : null}
         {activeTab === 'receipts' ? renderReceiptsTab() : null}
         {activeTab === 'analysis' ? renderAnalysisTab() : null}
@@ -644,23 +882,46 @@ export function HomeScreen({
       </ScrollView>
 
       <View style={styles.tabBar}>
-        {TABS.map((tab) => (
-          <Pressable
-            key={tab.key}
-            onPress={() => setActiveTab(tab.key)}
-            style={[
-              styles.tabButton,
-              activeTab === tab.key && {
-                backgroundColor: themeColor.soft,
-                borderColor: themeColor.primary,
-              },
-            ]}
-          >
-            <Text style={[styles.tabButtonText, activeTab === tab.key && { color: themeColor.primary }]}>{tab.label}</Text>
-          </Pressable>
+        {TABS.slice(0, 2).map((tab) => (
+          <TabButton key={tab.key} activeTab={activeTab} tab={tab} themeColor={themeColor} onPress={() => setActiveTab(tab.key)} />
+        ))}
+        <Pressable
+          onPress={() => setActiveTab('entry')}
+          style={({ pressed }) => [
+            styles.centerActionButton,
+            { backgroundColor: themeColor.primary },
+            activeTab === 'entry' && styles.centerActionButtonActive,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.centerActionText}>+</Text>
+        </Pressable>
+        {TABS.slice(2).map((tab) => (
+          <TabButton key={tab.key} activeTab={activeTab} tab={tab} themeColor={themeColor} onPress={() => setActiveTab(tab.key)} />
         ))}
       </View>
     </View>
+  );
+}
+
+function TabButton({
+  activeTab,
+  onPress,
+  tab,
+  themeColor,
+}: {
+  activeTab: TabKey;
+  onPress: () => void;
+  tab: { key: Exclude<TabKey, 'entry'>; label: string; icon: string };
+  themeColor: ThemeColor;
+}) {
+  const isActive = activeTab === tab.key;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}>
+      <Text style={[styles.tabIcon, isActive && { color: themeColor.primary }]}>{tab.icon}</Text>
+      <Text style={[styles.tabButtonText, isActive && { color: themeColor.primary }]}>{tab.label}</Text>
+    </Pressable>
   );
 }
 
@@ -682,6 +943,15 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MiniStat({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <View style={styles.miniStat}>
+      <Text style={[styles.miniStatValue, { color }]}>{value}</Text>
+      <Text style={styles.miniStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function SummaryBreakdown({
   title,
   rows,
@@ -696,7 +966,7 @@ function SummaryBreakdown({
       {rows.map((row) => (
         <View key={row.label} style={styles.breakdownRow}>
           <Text style={styles.breakdownLabel}>
-            {row.count === undefined ? row.label : `${row.label} • ${row.count} FIS`}
+            {row.count === undefined ? row.label : `${row.label} - ${row.count} FIS`}
           </Text>
           <Text style={styles.breakdownAmount}>{`${row.amount.toFixed(2)} TL`}</Text>
         </View>
@@ -705,16 +975,306 @@ function SummaryBreakdown({
   );
 }
 
+function PieChart({ segments, totalLabel }: { segments: ChartSegment[]; totalLabel?: string }) {
+  const size = 164;
+  const strokeWidth = 24;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const visibleSegments = segments.filter((segment) => segment.amount > 0 && segment.percent > 0);
+
+  return (
+    <View style={styles.pieChartWrap}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <G rotation="-90" origin={`${size / 2}, ${size / 2}`}>
+          <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#eef2ef" strokeWidth={strokeWidth} fill="none" />
+          {visibleSegments.map((segment) => {
+            const dashLength = Math.max(segment.percent * circumference, 0);
+            const dashOffset = -offset;
+            offset += dashLength;
+
+            return (
+              <Circle
+                key={segment.label}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke={segment.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="round"
+                fill="none"
+              />
+            );
+          })}
+        </G>
+      </Svg>
+      <View style={styles.pieChartCenter}>
+        <Text style={styles.pieChartCenterLabel}>{totalLabel ? 'TOPLAM' : 'KATEGORI'}</Text>
+        <Text style={totalLabel ? styles.pieChartCenterAmount : styles.pieChartCenterValue}>
+          {totalLabel ?? visibleSegments.length}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function HomeCategoryRow({
+  color,
+  row,
+  totalAmount,
+}: {
+  color: string;
+  row: CategoryTotalRow;
+  totalAmount: number;
+}) {
+  const percent = totalAmount > 0 ? Math.round((row.amount / totalAmount) * 100) : 0;
+
+  return (
+    <View style={styles.homeCategoryRow}>
+      <View style={[styles.homeCategoryIcon, { backgroundColor: `${color}18` }]}>
+        <Text style={[styles.homeCategoryIconText, { color }]}>{row.label.slice(0, 1).toUpperCase()}</Text>
+      </View>
+      <View style={styles.homeCategoryMain}>
+        <View style={styles.homeCategoryTop}>
+          <Text style={styles.homeCategoryName}>{row.label}</Text>
+          <Text style={styles.homeCategoryAmount}>{`${row.amount.toFixed(2)} TL`}</Text>
+        </View>
+        <View style={styles.homeProgressTrack}>
+          <View style={[styles.homeProgressFill, { width: `${Math.min(percent, 100)}%`, backgroundColor: color }]} />
+        </View>
+        <Text style={styles.homeCategoryPercent}>{`%${percent}`}</Text>
+      </View>
+    </View>
+  );
+}
+
+function CategoryDashboardCard({
+  color,
+  row,
+  totalAmount,
+}: {
+  color: string;
+  row: CategoryTotalRow;
+  totalAmount: number;
+}) {
+  const percent = totalAmount > 0 ? Math.round((row.amount / totalAmount) * 100) : 0;
+
+  return (
+    <View style={styles.categoryCard}>
+      <View style={[styles.categoryAccent, { backgroundColor: color }]} />
+      <View style={styles.categoryCardMain}>
+        <View style={styles.categoryCardHeader}>
+          <Text style={styles.categoryCardTitle}>{row.label.toUpperCase()}</Text>
+          <Text style={[styles.categoryPercent, { color }]}>{`%${percent}`}</Text>
+        </View>
+        <Text style={styles.categoryCardAmount}>{`${row.amount.toFixed(2)} TL`}</Text>
+        <Text style={styles.categoryCardMeta}>{`${row.count ?? 0} FIS`}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f7faf8',
+    backgroundColor: '#eefaf4',
   },
   container: {
     flexGrow: 1,
     padding: 24,
-    paddingBottom: 112,
-    backgroundColor: '#f7faf8',
+    paddingTop: 52,
+    paddingBottom: 116,
+    backgroundColor: '#eefaf4',
+  },
+  homeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 22,
+  },
+  homeGreeting: {
+    color: '#9aa9b8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeTitle: {
+    color: '#06152b',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#f4fff8',
+    borderWidth: 1,
+    borderColor: '#d8f5e3',
+  },
+  notificationIcon: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  periodSwitcher: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 6,
+    marginBottom: 16,
+  },
+  periodOption: {
+    flex: 1,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  periodText: {
+    color: '#9aa9b8',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  periodTextActive: {
+    color: '#ffffff',
+  },
+  homeDashboardCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 18,
+    gap: 14,
+    marginBottom: 16,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  homeDashboardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  homeDashboardAmount: {
+    color: '#06152b',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  trendPill: {
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#eefaf4',
+    paddingHorizontal: 12,
+  },
+  trendPillText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  homeCategoryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    paddingTop: 16,
+    overflow: 'hidden',
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  homeCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f4f2',
+    padding: 16,
+  },
+  homeCategoryIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  homeCategoryIconText: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  homeCategoryMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 7,
+  },
+  homeCategoryTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  homeCategoryName: {
+    flex: 1,
+    color: '#06152b',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  homeCategoryAmount: {
+    color: '#06152b',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  homeProgressTrack: {
+    height: 5,
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: '#eef2ef',
+  },
+  homeProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  homeCategoryPercent: {
+    color: '#9aa9b8',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
   },
   header: {
     gap: 12,
@@ -736,6 +1296,171 @@ const styles = StyleSheet.create({
     color: '#52645d',
     fontSize: 16,
     lineHeight: 24,
+  },
+  uploadHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#f4fff8',
+  },
+  backButtonText: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  uploadDropzone: {
+    minHeight: 238,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#68d991',
+    backgroundColor: '#f4fff8',
+    padding: 22,
+  },
+  uploadIconBox: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  uploadIconText: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  uploadDropTitle: {
+    color: '#06152b',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  uploadDropSubtitle: {
+    color: '#9aa9b8',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  fileSelectButton: {
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+  },
+  fileSelectButtonText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  uploadDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginVertical: 26,
+  },
+  uploadDivider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#d8e3dd',
+  },
+  uploadDividerText: {
+    color: '#9aa9b8',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  uploadActionGrid: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  uploadActionCardPrimary: {
+    flex: 1,
+    minHeight: 148,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  uploadActionCardSecondary: {
+    flex: 1,
+    minHeight: 148,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  uploadActionIconPrimary: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  uploadActionIconSecondary: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
+  uploadActionIconTextPrimary: {
+    color: '#ffffff',
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  uploadActionIconTextSecondary: {
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  uploadActionTitlePrimary: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  uploadActionSubtitlePrimary: {
+    color: '#e4fff0',
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  uploadActionTitleSecondary: {
+    color: '#06152b',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  uploadActionSubtitleSecondary: {
+    color: '#9aa9b8',
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   panel: {
     marginTop: 36,
@@ -917,18 +1642,99 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   receiptsPanel: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#d8e3dd',
+    borderColor: '#ccefdc',
     backgroundColor: '#ffffff',
     padding: 14,
     gap: 12,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
+  filterButton: {
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#f4fff8',
+    paddingHorizontal: 14,
+  },
+  filterButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  searchBox: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#f4fff8',
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  searchIcon: {
+    color: '#9aa9b8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  searchPlaceholder: {
+    color: '#9aa9b8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  receiptStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  miniStat: {
+    flex: 1,
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  miniStatValue: {
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  miniStatLabel: {
+    marginTop: 4,
+    color: '#9aa9b8',
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   refreshButton: {
     minHeight: 36,
@@ -957,6 +1763,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#eef2ef',
     paddingTop: 12,
+  },
+  receiptList: {
+    gap: 12,
+  },
+  receiptCard: {
+    minHeight: 74,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   categoryIcon: {
     width: 38,
@@ -989,6 +1814,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  receiptCategoryPill: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: '900',
+  },
   receiptDate: {
     color: '#52645d',
     fontSize: 12,
@@ -998,13 +1832,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  receiptAmountBox: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  receiptTax: {
+    color: '#9aa9b8',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   analysisPanel: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#d8e3dd',
+    borderColor: '#ccefdc',
     backgroundColor: '#ffffff',
     padding: 14,
     gap: 14,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   selectorBlock: {
     gap: 8,
@@ -1051,6 +1899,160 @@ const styles = StyleSheet.create({
     color: '#52645d',
     fontSize: 14,
     fontWeight: '900',
+  },
+  dashboardHero: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: 8,
+    padding: 14,
+  },
+  dashboardHeroText: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dashboardEyebrow: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  dashboardTotal: {
+    color: '#12231d',
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 34,
+  },
+  dashboardMeta: {
+    color: '#52645d',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  dashboardYearPill: {
+    minWidth: 104,
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    padding: 10,
+    gap: 4,
+  },
+  dashboardYearLabel: {
+    color: '#52645d',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  dashboardYearValue: {
+    color: '#12231d',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  dashboardYearCount: {
+    color: '#52645d',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  chartPanel: {
+    gap: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eef2ef',
+    backgroundColor: '#fbfdfb',
+    padding: 12,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  chartSubtitle: {
+    marginTop: 4,
+    color: '#52645d',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  chartTotal: {
+    color: '#21725e',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  pieChartWrap: {
+    height: 176,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pieChartCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pieChartCenterLabel: {
+    color: '#52645d',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  pieChartCenterValue: {
+    color: '#12231d',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  pieChartCenterAmount: {
+    color: '#06152b',
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  insightText: {
+    color: '#12231d',
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 19,
+  },
+  categoryCardGrid: {
+    gap: 10,
+  },
+  categoryCard: {
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eef2ef',
+    backgroundColor: '#ffffff',
+  },
+  categoryAccent: {
+    width: 6,
+  },
+  categoryCardMain: {
+    flex: 1,
+    gap: 6,
+    padding: 12,
+  },
+  categoryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  categoryCardTitle: {
+    flex: 1,
+    color: '#52645d',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  categoryPercent: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  categoryCardAmount: {
+    color: '#12231d',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  categoryCardMeta: {
+    color: '#52645d',
+    fontSize: 12,
+    fontWeight: '800',
   },
   metricGrid: {
     gap: 10,
@@ -1101,18 +2103,119 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   accountPanel: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#d8e3dd',
+    borderColor: '#ccefdc',
     backgroundColor: '#ffffff',
     padding: 14,
     gap: 12,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 18,
+    marginTop: 18,
+    marginBottom: 16,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  profileAvatar: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  profileAvatarText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  profileInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  profileName: {
+    color: '#06152b',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  profileEmail: {
+    color: '#9aa9b8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  profileBadge: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  budgetCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  budgetContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    marginTop: 18,
+  },
+  budgetGauge: {
+    width: 112,
+    height: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 56,
+    borderWidth: 1,
+    borderColor: '#bdeecf',
+  },
+  budgetGaugeValue: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  budgetGaugeLabel: {
+    color: '#52645d',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  budgetRows: {
+    flex: 1,
+    gap: 8,
   },
   themePanel: {
     gap: 10,
-    borderRadius: 8,
-    backgroundColor: '#f7faf8',
-    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   themeTitle: {
     color: '#12231d',
@@ -1164,30 +2267,59 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    gap: 4,
     borderTopWidth: 1,
-    borderTopColor: '#d8e3dd',
+    borderTopColor: '#e6ece9',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   tabButton: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d8e3dd',
-    backgroundColor: '#f7faf8',
+    gap: 3,
+    borderRadius: 12,
     paddingHorizontal: 4,
   },
+  tabIcon: {
+    color: '#9aa9b8',
+    fontSize: 17,
+    fontWeight: '900',
+  },
   tabButtonText: {
-    color: '#52645d',
-    fontSize: 11,
+    color: '#9aa9b8',
+    fontSize: 10,
     fontWeight: '900',
     textAlign: 'center',
+  },
+  centerActionButton: {
+    width: 58,
+    height: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 29,
+    borderWidth: 5,
+    borderColor: '#ffffff',
+    marginTop: -30,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  centerActionButtonActive: {
+    transform: [{ scale: 1.04 }],
+  },
+  centerActionText: {
+    color: '#ffffff',
+    fontSize: 34,
+    lineHeight: 36,
+    fontWeight: '500',
   },
   pressed: {
     opacity: 0.85,
