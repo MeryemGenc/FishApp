@@ -17,9 +17,11 @@ import {
   listReceipts,
   refreshSpendingSummaries,
   saveReceipt,
+  updateReceipt,
   type MonthlySpendingSummary,
   type ReceiptListItem,
   type SavedReceipt,
+  type UpdateReceiptInput,
   type YearlySpendingSummary,
 } from './src/services/receiptRepository';
 import { uploadReceiptImage, type ReceiptUploadResult } from './src/services/receiptUpload';
@@ -108,6 +110,26 @@ export default function App() {
     }
   }, [session, selectedAnalysisYear, selectedAnalysisMonth]);
 
+  function getReceiptValidationMessage(receipt: ParsedReceipt) {
+    if (!receipt.merchant?.trim()) {
+      return 'Magaza bilgisi eksik. Kayit icin once tamamla.';
+    }
+
+    if (typeof receipt.totalAmount !== 'number' || !Number.isFinite(receipt.totalAmount) || receipt.totalAmount <= 0) {
+      return 'Tutar bilgisi eksik veya hatali. Kayit icin once tamamla.';
+    }
+
+    if (!receipt.date?.trim()) {
+      return 'Tarih bilgisi eksik. Kayit icin once tamamla.';
+    }
+
+    if (!receipt.category?.trim()) {
+      return 'Kategori bilgisi eksik. Kayit icin once tamamla.';
+    }
+
+    return '';
+  }
+
   function resetReceiptFlow() {
     setActiveScreen('home');
     setLatestPhotoUri(null);
@@ -175,23 +197,7 @@ export default function App() {
       setParsedReceipt(parsed);
 
       if (session) {
-        setIsSavingReceipt(true);
-
-        try {
-          const saved = await saveReceipt({
-            userId: session.user.id,
-            imageUrl: upload?.publicUrl ?? null,
-            parsedReceipt: parsed,
-          });
-          setSavedReceipt(saved);
-          await refreshSpendingSummaries(session.user.id, saved.date ?? parsed.date);
-          await refreshReceipts(session.user.id);
-          await refreshAnalysis(session.user.id);
-        } catch (error) {
-          setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
-        } finally {
-          setIsSavingReceipt(false);
-        }
+        setSaveError('Kaydetmeden once fis bilgilerini kontrol et.');
       } else {
         setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
       }
@@ -199,6 +205,40 @@ export default function App() {
       setOcrError(error instanceof Error ? error.message : 'OCR metni cikarilamadi.');
     } finally {
       setIsOcrProcessing(false);
+    }
+  }
+
+  async function handleSaveParsedReceipt(nextParsedReceipt: ParsedReceipt) {
+    if (!session) {
+      setSaveError('DB kaydi icin Supabase auth ile giris yapmak gerekiyor.');
+      return;
+    }
+
+    const validationMessage = getReceiptValidationMessage(nextParsedReceipt);
+
+    if (validationMessage) {
+      setSaveError(validationMessage);
+      return;
+    }
+
+    setParsedReceipt(nextParsedReceipt);
+    setSaveError('');
+    setIsSavingReceipt(true);
+
+    try {
+      const saved = await saveReceipt({
+        userId: session.user.id,
+        imageUrl: latestUpload?.publicUrl ?? null,
+        parsedReceipt: nextParsedReceipt,
+      });
+      setSavedReceipt(saved);
+      await refreshSpendingSummaries(session.user.id, saved.date ?? nextParsedReceipt.date);
+      await refreshReceipts(session.user.id);
+      await refreshAnalysis(session.user.id);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Fis DB kaydi olusturulamadi.');
+    } finally {
+      setIsSavingReceipt(false);
     }
   }
 
@@ -218,6 +258,35 @@ export default function App() {
     if (!result.canceled && result.assets[0]?.uri) {
       await processReceiptPhoto(result.assets[0].uri);
     }
+  }
+
+  async function handleUpdateReceipt(input: Omit<UpdateReceiptInput, 'userId'>) {
+    if (!session) {
+      throw new Error('Fis duzenlemek icin once giris yapmak gerekiyor.');
+    }
+
+    const previousReceipt = receipts.find((receipt) => receipt.id === input.id);
+    const updatedReceipt = await updateReceipt({
+      ...input,
+      userId: session.user.id,
+    });
+
+    setReceipts((currentReceipts) =>
+      currentReceipts.map((receipt) => (receipt.id === updatedReceipt.id ? updatedReceipt : receipt)),
+    );
+
+    if (savedReceipt?.id === updatedReceipt.id) {
+      setSavedReceipt(updatedReceipt);
+    }
+
+    await refreshSpendingSummaries(session.user.id, updatedReceipt.date);
+
+    if (previousReceipt?.date && previousReceipt.date !== updatedReceipt.date) {
+      await refreshSpendingSummaries(session.user.id, previousReceipt.date);
+    }
+
+    await refreshReceipts(session.user.id);
+    await refreshAnalysis(session.user.id);
   }
 
   if (isLoading) {
@@ -254,8 +323,10 @@ export default function App() {
           onPickPhoto={handlePickPhoto}
           onRefreshAnalysis={() => refreshAnalysis()}
           onReturnToAuth={resetReceiptFlow}
+          onSaveParsedReceipt={handleSaveParsedReceipt}
           onSelectAnalysisMonth={setSelectedAnalysisMonth}
           onSelectAnalysisYear={setSelectedAnalysisYear}
+          onUpdateReceipt={handleUpdateReceipt}
           parsedReceipt={parsedReceipt}
           receipts={receipts}
           receiptsError={receiptsError}

@@ -61,9 +61,69 @@ type SaveReceiptInput = {
   parsedReceipt: ParsedReceipt;
 };
 
+export type UpdateReceiptInput = {
+  id: string;
+  userId: string;
+  merchant: string | null;
+  totalAmount: number;
+  taxAmount: number | null;
+  taxRate: number | null;
+  date: string;
+  category: string;
+};
+
+function normalizeOptionalText(value: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeRequiredText(value: string | null, fieldName: string) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    throw new Error(`${fieldName} bos birakilamaz.`);
+  }
+
+  return trimmed;
+}
+
+function assertValidAmount(amount: number | null, fieldName: string) {
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error(`${fieldName} gecerli ve sifirdan buyuk olmali.`);
+  }
+}
+
+function assertValidOptionalAmount(amount: number | null, fieldName: string) {
+  if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+    throw new Error(`${fieldName} sifirdan kucuk olamaz.`);
+  }
+}
+
+function assertValidOptionalRate(rate: number | null) {
+  if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate > 100)) {
+    throw new Error('KDV orani 0 ile 100 arasinda olmali.');
+  }
+}
+
+function normalizeTaxAmount(amount: number | null) {
+  return amount ?? 0;
+}
+
 export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveReceiptInput): Promise<SavedReceipt> {
   if (!supabase) {
     throw new Error('Supabase env bilgileri eklenmeden DB kaydi calismaz.');
+  }
+
+  assertValidAmount(parsedReceipt.totalAmount, 'Fis tutari');
+  assertValidOptionalAmount(parsedReceipt.taxAmount, 'KDV tutari');
+  assertValidOptionalRate(parsedReceipt.taxRate);
+
+  const merchant = normalizeRequiredText(parsedReceipt.merchant, 'Magaza');
+  const date = normalizeRequiredText(parsedReceipt.date, 'Tarih');
+  const category = normalizeRequiredText(parsedReceipt.category, 'Kategori');
+
+  if (!imageUrl && !parsedReceipt.rawText.trim()) {
+    throw new Error('Bos fis kaydi olusturulamaz.');
   }
 
   const { data, error } = await supabase
@@ -73,12 +133,12 @@ export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveRecei
       image_url: imageUrl,
       raw_text: parsedReceipt.rawText,
       total_amount: parsedReceipt.totalAmount,
-      tax_amount: parsedReceipt.taxAmount,
+      tax_amount: normalizeTaxAmount(parsedReceipt.taxAmount),
       tax_rate: parsedReceipt.taxRate,
       tax_breakdown: parsedReceipt.taxBreakdown,
-      date: parsedReceipt.date,
-      merchant: parsedReceipt.merchant,
-      category: parsedReceipt.category,
+      date,
+      merchant,
+      category,
       confidence: parsedReceipt.confidence,
     })
     .select('id, image_url, merchant, total_amount, tax_amount, tax_rate, tax_breakdown, date, category, confidence, created_at')
@@ -90,6 +150,45 @@ export async function saveReceipt({ userId, imageUrl, parsedReceipt }: SaveRecei
 
   if (!data?.id) {
     throw new Error('Fis kaydedildi ancak Supabase kayit ID degeri donmedi.');
+  }
+
+  return data;
+}
+
+export async function updateReceipt(input: UpdateReceiptInput): Promise<SavedReceipt> {
+  if (!supabase) {
+    throw new Error('Supabase env bilgileri eklenmeden fis guncellenemez.');
+  }
+
+  assertValidAmount(input.totalAmount, 'Fis tutari');
+  assertValidOptionalAmount(input.taxAmount, 'KDV tutari');
+  assertValidOptionalRate(input.taxRate);
+
+  const merchant = normalizeRequiredText(input.merchant, 'Magaza');
+  const category = normalizeRequiredText(input.category, 'Kategori');
+  const date = normalizeRequiredText(input.date, 'Tarih');
+
+  const { data, error } = await supabase
+    .from('receipts')
+    .update({
+      merchant,
+      total_amount: input.totalAmount,
+      tax_amount: normalizeTaxAmount(input.taxAmount),
+      tax_rate: input.taxRate,
+      date,
+      category,
+    })
+    .eq('id', input.id)
+    .eq('user_id', input.userId)
+    .select('id, image_url, merchant, total_amount, tax_amount, tax_rate, tax_breakdown, date, category, confidence, created_at')
+    .single<SavedReceipt>();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.id) {
+    throw new Error('Fis guncellendi ancak Supabase kayit ID degeri donmedi.');
   }
 
   return data;

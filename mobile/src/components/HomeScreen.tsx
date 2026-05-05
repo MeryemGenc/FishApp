@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,7 @@ import type {
   MonthlySpendingSummary,
   ReceiptListItem,
   SavedReceipt,
+  UpdateReceiptInput,
   YearlySpendingSummary,
 } from '../services/receiptRepository';
 import type { ReceiptUploadResult } from '../services/receiptUpload';
@@ -18,6 +19,15 @@ import type { ReceiptUploadResult } from '../services/receiptUpload';
 type TabKey = 'home' | 'entry' | 'receipts' | 'analysis' | 'account';
 type ThemeColorKey = 'green' | 'blue' | 'rose' | 'amber';
 type AnalysisCategoryKey = 'All' | string;
+type EditReceiptForm = {
+  id: string;
+  merchant: string;
+  totalAmount: string;
+  taxRate: string;
+  date: string;
+  category: string;
+};
+type DraftReceiptForm = Omit<EditReceiptForm, 'id'>;
 
 type CategoryTotalRow = {
   label: string;
@@ -54,8 +64,10 @@ type HomeScreenProps = {
   onRefreshAnalysis: () => void;
   onRefreshReceipts: () => void;
   onReturnToAuth: () => void;
+  onSaveParsedReceipt: (parsedReceipt: ParsedReceipt) => Promise<void>;
   onSelectAnalysisMonth: (month: number) => void;
   onSelectAnalysisYear: (year: number) => void;
+  onUpdateReceipt: (input: Omit<UpdateReceiptInput, 'userId'>) => Promise<void>;
   parsedReceipt: ParsedReceipt | null;
   receipts: ReceiptListItem[];
   receiptsError: string;
@@ -99,7 +111,7 @@ const MONTH_OPTIONS = [
 
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-const DEFAULT_CATEGORY_OPTIONS = ['Market', 'Food', 'Transport', 'Other'];
+const DEFAULT_CATEGORY_OPTIONS = ['Market', 'Food', 'Transport', 'Bills', 'Health', 'Other'];
 const CATEGORY_CHART_COLORS: Record<string, string> = {
   Market: '#21725e',
   Food: '#d88722',
@@ -126,8 +138,10 @@ export function HomeScreen({
   onRefreshAnalysis,
   onRefreshReceipts,
   onReturnToAuth,
+  onSaveParsedReceipt,
   onSelectAnalysisMonth,
   onSelectAnalysisYear,
+  onUpdateReceipt,
   parsedReceipt,
   receipts,
   receiptsError,
@@ -145,8 +159,32 @@ export function HomeScreen({
   const [selectedAnalysisCategory, setSelectedAnalysisCategory] = useState<AnalysisCategoryKey>('All');
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [copyMessage, setCopyMessage] = useState('');
+  const [editingReceipt, setEditingReceipt] = useState<EditReceiptForm | null>(null);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+  const [isUpdatingReceipt, setIsUpdatingReceipt] = useState(false);
+  const [draftReceipt, setDraftReceipt] = useState<DraftReceiptForm | null>(null);
+  const [draftError, setDraftError] = useState('');
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const themeColor = THEME_COLORS.find((color) => color.key === themeColorKey) ?? THEME_COLORS[0];
+
+  useEffect(() => {
+    if (!parsedReceipt || savedReceipt) {
+      setDraftReceipt(null);
+      setDraftError('');
+      return;
+    }
+
+    setDraftReceipt({
+      merchant: parsedReceipt.merchant ?? '',
+      totalAmount: parsedReceipt.totalAmount === null ? '' : String(parsedReceipt.totalAmount),
+      taxRate: parsedReceipt.taxRate === null ? '' : String(parsedReceipt.taxRate),
+      date: parsedReceipt.date ?? '',
+      category: parsedReceipt.category ?? 'Other',
+    });
+    setDraftError('');
+  }, [parsedReceipt, savedReceipt]);
 
   async function handleSignOut() {
     if (!supabase) {
@@ -180,11 +218,214 @@ export function HomeScreen({
     return typeof numericAmount === 'number' && Number.isFinite(numericAmount) ? `${numericAmount.toFixed(2)} TL` : '0.00 TL';
   }
 
-  function formatReceiptDate(date: string | null, createdAt: string) {
-    const dateText = date ?? createdAt.slice(0, 10);
+  function formatReceiptDate(date: string | null) {
+    if (!date) {
+      return 'TARIH EKSIK';
+    }
+
+    const dateText = date;
     const [year, month, day] = dateText.split('-');
 
     return year && month && day ? `${day}.${month}.${year}` : dateText;
+  }
+
+  function calculateTaxAmount(totalAmount: number, taxRate: number | null) {
+    if (taxRate === null || taxRate <= 0) {
+      return 0;
+    }
+
+    return Number(((totalAmount * taxRate) / (100 + taxRate)).toFixed(2));
+  }
+
+  function getTaxAmountPreview(totalAmountText: string, taxRateText: string) {
+    const totalAmount = parseDecimalInput(totalAmountText, 'Tutar', { allowThrow: false });
+    const taxRate = parseDecimalInput(taxRateText, 'KDV orani', { required: false, allowThrow: false });
+
+    if (totalAmount === null || totalAmount <= 0 || taxRate === null || taxRate < 0 || taxRate > 100) {
+      return 'KDV orani girilince otomatik hesaplanir.';
+    }
+
+    return `${calculateTaxAmount(totalAmount, taxRate).toFixed(2)} TL`;
+  }
+
+  function parseDecimalInput(
+    value: string,
+    fieldName: string,
+    { required = true, allowThrow = true } = {},
+  ) {
+    const normalizedValue = value.trim().replace(',', '.');
+
+    if (!normalizedValue) {
+      if (required) {
+        if (!allowThrow) {
+          return null;
+        }
+
+        throw new Error(`${fieldName} bos birakilamaz.`);
+      }
+
+      return null;
+    }
+
+    const numericValue = Number(normalizedValue);
+
+    if (!Number.isFinite(numericValue)) {
+      if (!allowThrow) {
+        return null;
+      }
+
+      throw new Error(`${fieldName} sayisal olmali.`);
+    }
+
+    return numericValue;
+  }
+
+  function startEditingReceipt(receipt: ReceiptListItem) {
+    setEditError('');
+    setEditSuccess('');
+    setEditingReceipt({
+      id: receipt.id,
+      merchant: receipt.merchant ?? '',
+      totalAmount: receipt.total_amount === null ? '' : String(receipt.total_amount),
+      taxRate: receipt.tax_rate === null ? '' : String(receipt.tax_rate),
+      date: receipt.date ?? '',
+      category: receipt.category ?? 'Other',
+    });
+  }
+
+  function updateEditingReceipt(field: keyof EditReceiptForm, value: string) {
+    setEditingReceipt((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm));
+    setEditError('');
+    setEditSuccess('');
+  }
+
+  function updateDraftReceipt(field: keyof DraftReceiptForm, value: string) {
+    setDraftReceipt((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm));
+    setDraftError('');
+  }
+
+  async function handleSaveEditedReceipt() {
+    if (!editingReceipt) {
+      return;
+    }
+
+    const merchant = editingReceipt.merchant.trim();
+    const category = editingReceipt.category.trim();
+    const date = editingReceipt.date.trim();
+
+    try {
+      if (!merchant) {
+        throw new Error('Magaza bos birakilamaz.');
+      }
+
+      if (!category) {
+        throw new Error('Kategori bos birakilamaz.');
+      }
+
+      if (!date) {
+        throw new Error('Tarih bos birakilamaz.');
+      }
+
+      if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error('Tarih YYYY-AA-GG formatinda olmali.');
+      }
+
+      const totalAmount = parseDecimalInput(editingReceipt.totalAmount, 'Tutar');
+      const taxRate = parseDecimalInput(editingReceipt.taxRate, 'KDV orani', { required: false });
+
+      if (totalAmount === null || totalAmount <= 0) {
+        throw new Error('Tutar sifirdan buyuk olmali.');
+      }
+
+      if (taxRate !== null && (taxRate < 0 || taxRate > 100)) {
+        throw new Error('KDV orani 0 ile 100 arasinda olmali.');
+      }
+
+      const taxAmount = calculateTaxAmount(totalAmount, taxRate);
+
+      setIsUpdatingReceipt(true);
+      setEditError('');
+      setEditSuccess('');
+
+      await onUpdateReceipt({
+        id: editingReceipt.id,
+        merchant,
+        totalAmount,
+        taxAmount,
+        taxRate,
+        date,
+        category,
+      });
+
+      setEditSuccess('FIS GUNCELLENDI.');
+      setEditingReceipt(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Fis guncellenemedi.');
+    } finally {
+      setIsUpdatingReceipt(false);
+    }
+  }
+
+  async function handleSaveDraftReceipt() {
+    if (!draftReceipt || !parsedReceipt) {
+      return;
+    }
+
+    const merchant = draftReceipt.merchant.trim();
+    const category = draftReceipt.category.trim();
+    const date = draftReceipt.date.trim();
+
+    try {
+      if (!merchant) {
+        throw new Error('Magaza bos birakilamaz.');
+      }
+
+      if (!category) {
+        throw new Error('Kategori bos birakilamaz.');
+      }
+
+      if (!date) {
+        throw new Error('Tarih bos birakilamaz.');
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error('Tarih YYYY-AA-GG formatinda olmali.');
+      }
+
+      const totalAmount = parseDecimalInput(draftReceipt.totalAmount, 'Tutar');
+      const taxRate = parseDecimalInput(draftReceipt.taxRate, 'KDV orani', { required: false });
+
+      if (totalAmount === null || totalAmount <= 0) {
+        throw new Error('Tutar sifirdan buyuk olmali.');
+      }
+
+      if (taxRate !== null && (taxRate < 0 || taxRate > 100)) {
+        throw new Error('KDV orani 0 ile 100 arasinda olmali.');
+      }
+
+      const taxAmount = calculateTaxAmount(totalAmount, taxRate);
+
+      setIsSavingDraft(true);
+      setDraftError('');
+
+      await onSaveParsedReceipt({
+        ...parsedReceipt,
+        merchant,
+        totalAmount,
+        taxAmount,
+        taxRate,
+        taxBreakdown:
+          taxRate === null || taxRate <= 0
+            ? []
+            : [{ rate: taxRate, amount: taxAmount, totalWithTax: totalAmount }],
+        date,
+        category,
+      });
+    } catch (error) {
+      setDraftError(error instanceof Error ? error.message : 'Fis kaydedilemedi.');
+    } finally {
+      setIsSavingDraft(false);
+    }
   }
 
   function getCategoryStyle(category: string | null) {
@@ -464,6 +705,114 @@ export function HomeScreen({
           </View>
         ) : null}
 
+        {parsedReceipt && !savedReceipt && draftReceipt ? (
+          <View style={styles.editPanel}>
+            <View>
+              <Text style={styles.sectionTitle}>KAYIT ONCESI KONTROL</Text>
+              <Text style={styles.sectionSubtitle}>EKSIK VEYA HATALI OCR BILGISINI TAMAMLA</Text>
+            </View>
+
+            <Text style={styles.inputLabel}>MAGAZA</Text>
+            <TextInput
+              autoCapitalize="characters"
+              onChangeText={(value) => updateDraftReceipt('merchant', value)}
+              placeholder="MAGAZA ADI"
+              style={styles.editInput}
+              value={draftReceipt.merchant}
+            />
+
+            <View style={styles.editInputGrid}>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>TUTAR</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => updateDraftReceipt('totalAmount', value)}
+                  placeholder="0.00"
+                  style={styles.editInput}
+                  value={draftReceipt.totalAmount}
+                />
+              </View>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>TARIH</Text>
+                <TextInput
+                  keyboardType="numbers-and-punctuation"
+                  onChangeText={(value) => updateDraftReceipt('date', value)}
+                  placeholder="YYYY-AA-GG"
+                  style={styles.editInput}
+                  value={draftReceipt.date}
+                />
+              </View>
+            </View>
+
+            <View style={styles.editInputGrid}>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>KDV TUTARI</Text>
+                <View style={styles.computedInput}>
+                  <Text style={styles.computedInputText}>
+                    {getTaxAmountPreview(draftReceipt.totalAmount, draftReceipt.taxRate)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>KDV ORANI</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => updateDraftReceipt('taxRate', value)}
+                  placeholder="0"
+                  style={styles.editInput}
+                  value={draftReceipt.taxRate}
+                />
+              </View>
+            </View>
+
+            <Text style={styles.inputLabel}>KATEGORI</Text>
+            <View style={styles.categoryChoiceGrid}>
+              {getCategoryOptions()
+                .filter((category) => category !== 'All')
+                .map((category) => {
+                  const isSelected = draftReceipt.category === category;
+
+                  return (
+                    <Pressable
+                      key={category}
+                      onPress={() => updateDraftReceipt('category', category)}
+                      style={[
+                        styles.categoryChoice,
+                        {
+                          backgroundColor: isSelected ? themeColor.primary : '#f7faf8',
+                          borderColor: isSelected ? themeColor.primary : '#d8e3dd',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.categoryChoiceText, isSelected && styles.categoryChoiceTextActive]}>
+                        {category.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
+
+            {draftError ? <Text style={styles.errorText}>{draftError}</Text> : null}
+
+            <Pressable
+              disabled={isSavingDraft || isSavingReceipt}
+              onPress={handleSaveDraftReceipt}
+              style={({ pressed }) => [
+                styles.editSaveButton,
+                { backgroundColor: themeColor.primary },
+                pressed && styles.pressed,
+                (isSavingDraft || isSavingReceipt) && styles.disabled,
+              ]}
+            >
+              {isSavingDraft || isSavingReceipt ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.editSaveButtonText}>KONTROL ET VE KAYDET</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+
         {parsedReceipt ? (
           <View style={styles.savePanel}>
             <Text style={styles.sectionTitle}>KAYIT DURUMU</Text>
@@ -520,6 +869,127 @@ export function HomeScreen({
           <Text style={styles.emptyText}>Henuz kayitli fis yok.</Text>
         ) : null}
 
+        {editSuccess ? <Text style={[styles.successText, { color: themeColor.primary }]}>{editSuccess}</Text> : null}
+        {editError ? <Text style={styles.errorText}>{editError}</Text> : null}
+
+        {editingReceipt ? (
+          <View style={styles.editPanel}>
+            <View style={styles.editPanelHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>FIS DUZENLE</Text>
+                <Text style={styles.sectionSubtitle}>OCR HATALARINI BURADAN DUZELT</Text>
+              </View>
+              <Pressable
+                disabled={isUpdatingReceipt}
+                onPress={() => {
+                  setEditingReceipt(null);
+                  setEditError('');
+                }}
+                style={({ pressed }) => [styles.editCancelButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.editCancelButtonText}>VAZGEC</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.inputLabel}>MAGAZA</Text>
+            <TextInput
+              autoCapitalize="characters"
+              onChangeText={(value) => updateEditingReceipt('merchant', value)}
+              placeholder="MAGAZA ADI"
+              style={styles.editInput}
+              value={editingReceipt.merchant}
+            />
+
+            <View style={styles.editInputGrid}>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>TUTAR</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => updateEditingReceipt('totalAmount', value)}
+                  placeholder="0.00"
+                  style={styles.editInput}
+                  value={editingReceipt.totalAmount}
+                />
+              </View>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>TARIH</Text>
+                <TextInput
+                  keyboardType="numbers-and-punctuation"
+                  onChangeText={(value) => updateEditingReceipt('date', value)}
+                  placeholder="YYYY-AA-GG"
+                  style={styles.editInput}
+                  value={editingReceipt.date}
+                />
+              </View>
+            </View>
+
+            <View style={styles.editInputGrid}>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>KDV TUTARI</Text>
+                <View style={styles.computedInput}>
+                  <Text style={styles.computedInputText}>
+                    {getTaxAmountPreview(editingReceipt.totalAmount, editingReceipt.taxRate)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.editInputColumn}>
+                <Text style={styles.inputLabel}>KDV ORANI</Text>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => updateEditingReceipt('taxRate', value)}
+                  placeholder="20"
+                  style={styles.editInput}
+                  value={editingReceipt.taxRate}
+                />
+              </View>
+            </View>
+
+            <Text style={styles.inputLabel}>KATEGORI</Text>
+            <View style={styles.categoryChoiceGrid}>
+              {getCategoryOptions()
+                .filter((category) => category !== 'All')
+                .map((category) => {
+                  const isSelected = editingReceipt.category === category;
+
+                  return (
+                    <Pressable
+                      key={category}
+                      onPress={() => updateEditingReceipt('category', category)}
+                      style={[
+                        styles.categoryChoice,
+                        {
+                          backgroundColor: isSelected ? themeColor.primary : '#f7faf8',
+                          borderColor: isSelected ? themeColor.primary : '#d8e3dd',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.categoryChoiceText, isSelected && styles.categoryChoiceTextActive]}>
+                        {category.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
+
+            <Pressable
+              disabled={isUpdatingReceipt}
+              onPress={handleSaveEditedReceipt}
+              style={({ pressed }) => [
+                styles.editSaveButton,
+                { backgroundColor: themeColor.primary },
+                pressed && styles.pressed,
+                isUpdatingReceipt && styles.disabled,
+              ]}
+            >
+              {isUpdatingReceipt ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.editSaveButtonText}>KAYDET</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.receiptList}>
           {receipts.map((receipt) => {
             const categoryStyle = getCategoryStyle(receipt.category);
@@ -536,11 +1006,21 @@ export function HomeScreen({
                   <Text style={[styles.receiptCategoryPill, { color: themeColor.primary, backgroundColor: themeColor.soft }]}>
                     {receipt.category ?? 'Other'}
                   </Text>
-                  <Text style={styles.receiptDate}>{formatReceiptDate(receipt.date, receipt.created_at)}</Text>
+                  <Text style={styles.receiptDate}>{formatReceiptDate(receipt.date)}</Text>
                 </View>
                 <View style={styles.receiptAmountBox}>
                   <Text style={styles.receiptAmount}>{formatReceiptAmount(receipt.total_amount)}</Text>
                   <Text style={styles.receiptTax}>KDV: {formatTaxAmount(receipt.tax_amount)}</Text>
+                  <Pressable
+                    onPress={() => startEditingReceipt(receipt)}
+                    style={({ pressed }) => [
+                      styles.receiptEditButton,
+                      { borderColor: themeColor.primary },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={[styles.receiptEditButtonText, { color: themeColor.primary }]}>DUZENLE</Text>
+                  </Pressable>
                 </View>
               </View>
             );
@@ -1839,6 +2319,126 @@ const styles = StyleSheet.create({
   receiptTax: {
     color: '#9aa9b8',
     fontSize: 10,
+    fontWeight: '900',
+  },
+  receiptEditButton: {
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+  },
+  receiptEditButtonText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  editPanel: {
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ccefdc',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    gap: 10,
+    shadowColor: '#0b5931',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  editPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  editCancelButton: {
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#f7faf8',
+    paddingHorizontal: 12,
+  },
+  editCancelButtonText: {
+    color: '#52645d',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  inputLabel: {
+    marginTop: 4,
+    color: '#52645d',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  editInput: {
+    minHeight: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#f7faf8',
+    color: '#12231d',
+    fontSize: 14,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+  },
+  computedInput: {
+    minHeight: 44,
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d8e3dd',
+    backgroundColor: '#eef2ef',
+    paddingHorizontal: 12,
+  },
+  computedInputText: {
+    color: '#52645d',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  editInputGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  editInputColumn: {
+    flex: 1,
+    gap: 6,
+  },
+  categoryChoiceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChoice: {
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+  },
+  categoryChoiceText: {
+    color: '#52645d',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  categoryChoiceTextActive: {
+    color: '#ffffff',
+  },
+  editSaveButton: {
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  editSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '900',
   },
   analysisPanel: {
